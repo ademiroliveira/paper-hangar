@@ -134,7 +134,20 @@ function solveFold(f: FoldSpec, faces: Face[], ctx: RefContext): Line {
     if (!f.move) throw new RefError('A fold "along" a line also needs "move": a point on the side that moves.');
     return { a: L.a, b: L.b, mover: pointOf(resolve(f.move, faces, ctx)) };
   }
-  if (!f.bring || !f.to) throw new RefError('A fold needs "bring" and "to", or "along" and "move".');
+  if (f.parallel) {
+    const L = resolve(f.parallel, faces, ctx);
+    if (L.kind !== 'line') throw new RefError(`"parallel" needs a line (edge:… or crease:…), got "${f.parallel}".`);
+    if (!f.move) throw new RefError('A "parallel" fold also needs "move": a point on the side that moves.');
+    if (!(typeof f.distance === 'number' && f.distance > 0)) throw new RefError('A "parallel" fold needs "distance": how far from the line, in cm.');
+    const M = xz(pointOf(resolve(f.move, faces, ctx)));
+    const a = xz(L.a), dir = xz(L.b).sub(a).normalize();
+    const nrm = new Vector3(-dir.z, 0, dir.x);
+    const side = Math.sign(M.clone().sub(a).dot(nrm));
+    if (side === 0) throw new RefError(`"${f.move}" lies on "${f.parallel}", so it doesn't say which side moves.`);
+    const p0 = a.clone().addScaledVector(nrm, side * f.distance);
+    return { a: p0, b: p0.clone().add(dir), mover: M };
+  }
+  if (!f.bring || !f.to) throw new RefError('A fold needs "bring" and "to", "along" and "move", or "parallel", "distance" and "move".');
   const A = resolve(f.bring, faces, ctx), B = resolve(f.to, faces, ctx);
 
   const bisector = (p: Vector3, q: Vector3): Line => {
@@ -257,7 +270,7 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
         }
       }
     }
-    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along}".`);
+    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along ?? f.parallel}".`);
     if (chosen.size === split.length && k === 0 && folds.length === 1) {
       throw new RefError('This fold moves all of the paper, so the fold line misses the sheet. Check the points, or use "flip" to turn the model over.');
     }
@@ -323,7 +336,7 @@ function compileFlip(spec: StepSpec, index: number, start: Face[]): Step {
   return finish(index, spec, 'table', faces, [op]);
 }
 
-function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefContext, W: number, H: number, flyH: number): Step {
+function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefContext, W: number, H: number, plane: CompiledPlane): Step {
   const pose = spec.pose as PoseSpec;
   const faces = start.map(f => new Face(f.poly, f.M, f.tags));
   const spine = resolve(pose.spine, faces, ctx), keel = resolve(pose.keel, faces, ctx);
@@ -343,10 +356,23 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
   // nose: the spine end that touches the keel
   const kA = xz(keel.a), kDir = xz(keel.b).sub(kA).normalize();
   const distToKeel = (p: Vector3) => { const q = xz(p).sub(kA); return q.sub(kDir.clone().multiplyScalar(q.dot(kDir))).length(); };
-  const [nose, tail] = distToKeel(spine.a) < distToKeel(spine.b) ? [spine.a, spine.b] : [spine.b, spine.a];
+  let noseFirst = distToKeel(spine.a) < distToKeel(spine.b);
+  if (pose.nose) {
+    const N = pointOf(resolve(pose.nose, faces, ctx));
+    noseFirst = distXZ(spine.a, N) < distXZ(spine.b, N);
+  } else if (Math.abs(distToKeel(spine.a) - distToKeel(spine.b)) < 0.5) {
+    throw new RefError('The wings hinge parallel to the keel, so I can\'t tell which end is the nose. Add "nose" to the pose: a point at the front of the plane.');
+  }
+  const [nose, tail] = noseFirst ? [spine.a, spine.b] : [spine.b, spine.a];
   const line: Line = { a: spine.a, b: spine.b, mover: keelFar };
 
-  const wingProf = range(0.45, 1), bodyProf = range(0, 0.62);
+  // Once the body stands, folded wings can hang further below the spine than the body itself.
+  // Float high enough to clear the table, and lift before turning so nothing sweeps through it.
+  let reach = 0;
+  faces.forEach(f => f.world().forEach(v => { reach = Math.max(reach, distToSpine(v)); }));
+  plane.flyHeight = Math.max(plane.flyHeight, reach + 1.5);
+  const flyH = plane.flyHeight;
+  const wingProf = range(0.5, 1), standProf = range(0.2, 0.62), liftProf = range(0, 0.4);
   const ops: Op[] = [];
   for (const id of pose.wings) {
     const mine = faces.map(f => wingOf(f) === id);
@@ -359,7 +385,7 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
     op.moving = mine;
     ops.push(op);
   }
-  const stand = makeOp(line, { kind: 'pose', angle: 90, prof: bodyProf, h: mid, lift: DOWN }).op;
+  const stand = makeOp(line, { kind: 'pose', angle: 90, prof: standProf, h: mid, lift: DOWN }).op;
   stand.moving = faces.map(() => true);
   ops.push(stand);
 
@@ -369,7 +395,7 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
   const yawAxis = new Vector3().crossVectors(dir, want);
   ops.push({
     kind: 'pose', pivot: center, axis: yawAxis.lengthSq() > 1e-9 ? yawAxis.normalize() : UP.clone(),
-    angle: dir.angleTo(want), tr: new Vector3(W / 2, flyH, -H / 2).sub(center), lift: UP, prof: bodyProf,
+    angle: dir.angleTo(want), tr: new Vector3(W / 2, flyH, -H / 2).sub(center), lift: UP, prof: liftProf,
     moving: faces.map(() => true), crease: null, arrow: false, arrowEnd: 1,
   });
   return finish(index, spec, 'flight', faces, ops);
@@ -398,7 +424,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
   for (let i = 0; i < stopAt; i++) {
     const s = spec.steps[i];
     try {
-      const st = s.pose ? compilePose(s, i, faces, ctx, W, H, plane.flyHeight)
+      const st = s.pose ? compilePose(s, i, faces, ctx, W, H, plane)
         : s.flip ? compileFlip(s, i, faces)
         : compileFolds(s, i, faces, ctx);
       // Physical checks: refuse anything a real sheet of paper couldn't do.

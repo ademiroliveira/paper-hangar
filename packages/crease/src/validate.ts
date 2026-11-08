@@ -22,11 +22,12 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
     const folds: FoldSpec[] = s.folds ?? (s.fold ? [s.fold] : []);
     folds.forEach((f, k) => {
       const label = folds.length > 1 ? `Fold ${k + 1}: ` : '';
-      const refs = (['bring', 'to', 'through', 'along', 'move'] as const).filter(key => f[key] !== undefined);
+      const refs = (['bring', 'to', 'through', 'along', 'move', 'parallel'] as const).filter(key => f[key] !== undefined);
       for (const key of refs) if (!isRef(f[key]!)) say(`${label}"${f[key]}" in "${key}" isn't a reference I know. Try corner:top-left, edge:left, crease:<id>, mid:edge:top or at:0.5,1.`);
       const bringTo = f.bring !== undefined && f.to !== undefined;
       const alongMove = f.along !== undefined && f.move !== undefined;
-      if (!bringTo && !alongMove) say(`${label}use "bring" + "to", or "along" + "move".`);
+      const parallel = f.parallel !== undefined && f.move !== undefined && typeof f.distance === 'number';
+      if (!bringTo && !alongMove && !parallel) say(`${label}use "bring" + "to", "along" + "move", or "parallel" + "distance" + "move".`);
       if (f.id) {
         if (ids.has(f.id)) say(`${label}the id "${f.id}" is already used by an earlier fold.`);
         ids.add(f.id);
@@ -35,6 +36,7 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
     if (s.pose) {
       if (s.pose.type !== 'flight') say('"pose.type" must be "flight".');
       for (const key of ['spine', 'keel'] as const) if (!s.pose[key] || !isRef(s.pose[key])) say(`"pose.${key}" must be a line reference, like crease:center.`);
+      if (s.pose.nose !== undefined && !isRef(s.pose.nose)) say(`"pose.nose" must be a point reference, like at:0.5,1.`);
       if (!Array.isArray(s.pose.wings) || !s.pose.wings.length) say('"pose.wings" must list the ids of the wing folds.');
       else for (const w of s.pose.wings) if (!ids.has(w)) say(`"pose.wings" mentions "${w}", but no earlier fold has that id.`);
     }

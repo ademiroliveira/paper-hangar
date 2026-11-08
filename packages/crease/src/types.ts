@@ -8,6 +8,7 @@ export type PaperSpec = 'A4' | 'Letter' | { width: number; height: number };
  *  - { bring: "corner:top-left", to: "crease:center", through: "mid:edge:top" }
  *  - { bring: "edge:left", to: "edge:right" }
  *  - { along: "crease:center", move: "corner:bottom-left" }
+ *  - { parallel: "crease:center", distance: 2.5, move: "corner:bottom-left" }
  */
 export interface FoldSpec {
   /** Name for the crease this fold makes, so later steps can point at it as `crease:<id>`. */
@@ -20,8 +21,12 @@ export interface FoldSpec {
   through?: string;
   /** Fold along an existing line instead of solving for one. */
   along?: string;
-  /** With `along`: a point on the side that moves. */
+  /** With `along` or `parallel`: a point on the side that moves. */
   move?: string;
+  /** Fold along a line parallel to this one, `distance` cm away on the side of `move`. */
+  parallel?: string;
+  /** With `parallel`: how far from that line, in cm. */
+  distance?: number;
   /** `top` folds only the uppermost flap; `all` (default) folds every layer on the moving side. */
   layers?: 'all' | 'top';
   /** Fold, press a crease, then open it flat again. */
@@ -43,6 +48,8 @@ export interface PoseSpec {
   wings: string[];
   /** Upward tilt of the wings in degrees. Default 6. */
   dihedral?: number;
+  /** A point at the front of the plane. Needed when the spine runs parallel to the keel; otherwise the nose is where they meet. */
+  nose?: string;
 }
 
 export interface StepSpec {

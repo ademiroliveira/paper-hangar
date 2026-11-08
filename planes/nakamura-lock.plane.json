@@ -1,0 +1,135 @@
+{
+  "$schema": "../packages/crease/plane.schema.json",
+  "id": "nakamura-lock",
+  "name": "Nakamura lock",
+  "summary": "A blunt-nosed glider with a small fold that locks the nose together. Slow, steady and long.",
+  "difficulty": 2,
+  "paper": "A4",
+  "steps": [
+    {
+      "title": "Crease the middle",
+      "text": "Fold the sheet in half the long way, crease it, and open it flat again.",
+      "fold": {
+        "id": "center",
+        "bring": "edge:left",
+        "to": "edge:right",
+        "unfold": true
+      }
+    },
+    {
+      "title": "Fold the top corners in",
+      "text": "Bring each top corner down to the center crease.",
+      "folds": [
+        {
+          "id": "corner-left",
+          "bring": "corner:top-left",
+          "to": "crease:center",
+          "through": "mid:edge:top"
+        },
+        {
+          "id": "corner-right",
+          "bring": "corner:top-right",
+          "to": "crease:center",
+          "through": "mid:edge:top"
+        }
+      ]
+    },
+    {
+      "title": "Fold the point down",
+      "text": "Fold the point down over the flaps so its tip sits about 2.5 cm (1 in) above the bottom edge.",
+      "fold": {
+        "id": "nose",
+        "bring": "mid:edge:top",
+        "to": "at:0.5,0.084"
+      }
+    },
+    {
+      "title": "Fold the new corners in",
+      "text": "Bring the two new top corners to the center crease. The tip of the point should still show below them.",
+      "folds": [
+        {
+          "id": "inner-left",
+          "bring": "at:0,0.542",
+          "to": "crease:center",
+          "through": "at:0.5,0.542"
+        },
+        {
+          "id": "inner-right",
+          "bring": "at:1,0.542",
+          "to": "crease:center",
+          "through": "at:0.5,0.542"
+        }
+      ]
+    },
+    {
+      "title": "Lock the flaps",
+      "text": "Fold the small triangle up over the two flaps. This is the lock that holds the nose together.",
+      "fold": {
+        "id": "lock",
+        "bring": "mid:edge:top",
+        "to": "crease:center",
+        "through": "at:0,0.542",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the paper so the folds face down.",
+      "flip": true
+    },
+    {
+      "title": "Fold in half",
+      "text": "Fold it in half along the center crease. The folds end up on the outside.",
+      "fold": {
+        "along": "crease:center",
+        "move": "corner:bottom-left"
+      }
+    },
+    {
+      "title": "Fold the first wing",
+      "text": "Fold the top layer down about 2.5 cm (1 in) from the bottom fold, parallel to it.",
+      "fold": {
+        "id": "wing-1",
+        "parallel": "crease:center",
+        "distance": 2.5,
+        "move": "corner:bottom-left",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the plane so the other side faces up.",
+      "flip": true
+    },
+    {
+      "title": "Fold the second wing",
+      "text": "Same fold on this side: about 2.5 cm from the bottom fold, parallel to it.",
+      "fold": {
+        "id": "wing-2",
+        "parallel": "crease:center",
+        "distance": 2.5,
+        "move": "corner:bottom-right",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Open the wings",
+      "text": "Lift both wings until they're level, angled slightly up.",
+      "pose": {
+        "type": "flight",
+        "spine": "crease:wing-2",
+        "keel": "crease:center",
+        "wings": [
+          "wing-1",
+          "wing-2"
+        ],
+        "nose": "at:0.5,0.542",
+        "dihedral": 5
+      }
+    }
+  ],
+  "done": {
+    "title": "Ready to glide",
+    "text": "Hold it under the wings and give it a level, gentle push. It glides best indoors or on a calm day."
+  }
+}

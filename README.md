@@ -72,7 +72,7 @@ A recipe lists steps. Each step does exactly one thing: `fold`, `folds` (several
 }
 ```
 
-See [`planes/classic-dart.plane.json`](planes/classic-dart.plane.json) for a complete plane.
+See [`planes/classic-dart.plane.json`](planes/classic-dart.plane.json) and [`planes/nakamura-lock.plane.json`](planes/nakamura-lock.plane.json) for complete planes.
 
 ### Pointing at the paper
 
@@ -96,6 +96,7 @@ References follow the paper as it folds: `corner:top-left` means that corner whe
 | `bring` a line `to` a line | the fold that lays one line on the other (or halfway between, if they're parallel) |
 | `bring` a point `to` a line `through` a point | the fold through that point that lands the first point on the line |
 | `along` a line, `move` a point | a fold along an existing line; the side with the point moves |
+| `parallel` to a line, `distance` in cm, `move` a point | a fold parallel to that line ("fold the wing down 2.5 cm from the belly") |
 
 Options on a fold:
 
@@ -106,7 +107,8 @@ Options on a fold:
 Other steps:
 
 - `"flip": true` turns the model over left-to-right. `{ "axis": "short" }` turns it top-to-bottom.
-- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it.
+- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane.
+- A mountain fold (away from you) is written as `flip`, then the fold, the way the Nakamura lock folds in half with its folds outside.
 
 Valley folds (toward you) and flips cover most beginner planes.
 

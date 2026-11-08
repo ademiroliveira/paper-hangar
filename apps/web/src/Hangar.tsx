@@ -24,12 +24,12 @@ function PlaneCard({ entry }: { entry: HangarEntry }) {
         <Card.Title className="font-display text-2xl font-extrabold tracking-tight">{plane.spec.name}</Card.Title>
         {plane.spec.summary && <Card.Description className="text-base text-muted">{plane.spec.summary}</Card.Description>}
       </Card.Header>
-      <Card.Content className="flex-row flex-wrap gap-2 px-5">
+      <Card.Content className="flex-none flex-row flex-wrap items-center gap-2 px-5">
         {plane.spec.difficulty && <Chip size="sm" color="accent" variant="soft">{LEVEL[plane.spec.difficulty]}</Chip>}
         <Chip size="sm">{plane.steps.length} steps</Chip>
         <Chip size="sm">{paper}</Chip>
       </Card.Content>
-      <Card.Footer className="flex-col gap-2 px-5 pb-5">
+      <Card.Footer className="mt-auto flex-col gap-2 px-5 pb-5">
         <Button fullWidth size="lg" onPress={() => { window.location.hash = `#/plane/${entry.id}`; }}>
           Start folding
         </Button>

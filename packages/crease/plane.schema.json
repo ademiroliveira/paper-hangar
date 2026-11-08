@@ -95,7 +95,7 @@
     "fold": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Say it like an instruction: bring X to Y (through Z), or fold along a line and move one side.",
+      "description": "Say it like an instruction: bring X to Y (through Z), fold along a line and move one side, or fold parallel to a line at a distance.",
       "properties": {
         "id": {
           "type": "string",
@@ -125,7 +125,7 @@
         "move": {
           "type": "string",
           "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
-          "description": "With along: a point on the side that moves."
+          "description": "With along or parallel: a point on the side that moves."
         },
         "layers": {
           "enum": [
@@ -138,6 +138,16 @@
         "unfold": {
           "type": "boolean",
           "description": "Fold, crease, then open it flat again."
+        },
+        "parallel": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "Fold along a line parallel to this one."
+        },
+        "distance": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "With parallel: how far from that line, in cm."
         }
       },
       "oneOf": [
@@ -150,6 +160,13 @@
         {
           "required": [
             "along",
+            "move"
+          ]
+        },
+        {
+          "required": [
+            "parallel",
+            "distance",
             "move"
           ]
         }
@@ -235,6 +252,11 @@
               "maximum": 30,
               "default": 6,
               "description": "Upward wing tilt in degrees."
+            },
+            "nose": {
+              "type": "string",
+              "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+              "description": "A point at the front of the plane. Needed when the wings hinge parallel to the keel."
             }
           }
         }
