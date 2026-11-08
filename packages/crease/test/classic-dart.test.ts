@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import Ajv2020 from 'ajv/dist/2020';
 import schema from '../plane.schema.json';
 import dart from '../../../planes/classic-dart.plane.json';
-import { compilePlane, faceMatrix, stepMatrices, validatePlane, arrowPath, projectFinal, type PlaneSpec, type Step } from '../src';
+import { compilePlane, compilePlaneSoFar, faceMatrix, stepMatrices, validatePlane, arrowPath, projectFinal, type PlaneSpec, type Step } from '../src';
 
 const spec = dart as PlaneSpec;
 const W = 21, H = 29.7, C = W / 2;
@@ -135,6 +135,13 @@ describe('recipe errors read like instructions', () => {
   it('asks for "through" when bringing a point onto a line', () => {
     const bad = withStep(1, { title: 'x', fold: { bring: 'corner:top-left', to: 'crease:center' } });
     expect(() => compilePlane(bad)).toThrow(/needs "through"/);
+  });
+
+  it('keeps the steps that work when a later step breaks, for review', () => {
+    const bad = withStep(4, { title: 'x', fold: { bring: 'crease:nope', to: 'crease:center' } });
+    const { plane: partial, error } = compilePlaneSoFar(bad);
+    expect(partial.steps).toHaveLength(4);
+    expect(error?.step).toBe(4);
   });
 
   it('flags malformed references before compiling', () => {

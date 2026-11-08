@@ -17,7 +17,7 @@ function PlaneCard({ entry }: { entry: HangarEntry }) {
   const paper = typeof plane.spec.paper === 'string' ? plane.spec.paper : `${plane.width}×${plane.height} cm`;
   return (
     <Card className="h-full overflow-hidden p-0">
-      <div className="aspect-[4/3] p-6" style={matGrid}>
+      <div className="aspect-[4/3] overflow-hidden p-6" style={matGrid}>
         <Thumbnail plane={plane} className="h-full w-full" />
       </div>
       <Card.Header className="px-5 pt-4">
@@ -29,9 +29,12 @@ function PlaneCard({ entry }: { entry: HangarEntry }) {
         <Chip size="sm">{plane.steps.length} steps</Chip>
         <Chip size="sm">{paper}</Chip>
       </Card.Content>
-      <Card.Footer className="px-5 pb-5">
+      <Card.Footer className="flex-col gap-2 px-5 pb-5">
         <Button fullWidth size="lg" onPress={() => { window.location.hash = `#/plane/${entry.id}`; }}>
           Start folding
+        </Button>
+        <Button fullWidth variant="ghost" onPress={() => { window.location.hash = `#/plane/${entry.id}/steps`; }}>
+          See all steps
         </Button>
       </Card.Footer>
     </Card>
@@ -49,6 +52,13 @@ function BrokenCard({ entry }: { entry: HangarEntry }) {
       <Card.Content>
         <p className="rounded-lg bg-[var(--danger-soft)] p-3 text-[15px] text-[var(--danger-soft-foreground)]">{entry.error}</p>
       </Card.Content>
+      {entry.partial && entry.partial.steps.length > 0 && (
+        <Card.Footer className="mt-2">
+          <Button variant="ghost" onPress={() => { window.location.hash = `#/plane/${entry.id}/steps`; }}>
+            See the steps that work
+          </Button>
+        </Card.Footer>
+      )}
     </Card>
   );
 }

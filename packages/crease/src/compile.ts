@@ -3,6 +3,7 @@ import { EPS, Face, components, flatToLocal, overlapsFromAbove, splitFace } from
 import { RefError, resolve, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
+import { auditStep } from './audit';
 
 /** Visual paper thickness between stacked layers (cm). */
 export const GAP = 0.02;
@@ -33,6 +34,8 @@ export interface Op {
   /** Whether to draw a fold arrow; it traces progress from 0 to arrowEnd. */
   arrow: boolean;
   arrowEnd: number;
+  /** Lift the moving paper this high mid-motion so it clears the table (used by flips). */
+  hop?: number;
 }
 
 export interface Step {
@@ -73,7 +76,11 @@ export function paperSize(p: PaperSpec): { W: number; H: number } {
 /* ---------- motion ---------- */
 
 export function opMatrix(op: Op, f: number): Matrix4 {
-  const tr = op.tr ? op.tr.clone().multiplyScalar(f) : new Vector3();
+  // Folds and flips land their stack on top of what's below. Easing the lift with the turn
+  // ((1 - cos) / 2 instead of linear) keeps every layer above the paper beneath it the whole way.
+  const s = op.kind === 'pose' ? f : (1 - Math.cos(Math.PI * f)) / 2;
+  const tr = op.tr ? op.tr.clone().multiplyScalar(s) : new Vector3();
+  if (op.hop) tr.y += op.hop * Math.sin(Math.PI * f);
   const m = new Matrix4().makeTranslation(op.pivot.x + tr.x, op.pivot.y + tr.y, op.pivot.z + tr.z);
   m.multiply(new Matrix4().makeRotationAxis(op.axis, op.angle * f));
   m.multiply(new Matrix4().makeTranslation(-op.pivot.x, -op.pivot.y, -op.pivot.z));
@@ -102,11 +109,14 @@ function makeOp(line: Line, o: { kind: Op['kind']; id?: string; angle: number; p
   const r = new Vector3(line.mover.x, h, line.mover.z);
   const axis = pb.clone().sub(pa).normalize();
   const n = new Vector3().crossVectors(axis, lift).normalize();
-  const side = Math.sign(r.clone().sub(pa).dot(n));
-  if (side === 0) throw new RefError('The side that moves is on the fold line itself.');
-  const s = r.clone().sub(pa);
-  s.addScaledVector(axis, -s.dot(axis));
-  if (new Vector3().crossVectors(axis, s).dot(lift) < 0) axis.negate();
+  const dist = r.clone().sub(pa).dot(n);
+  if (!(Math.abs(dist) > 1e-4)) {
+    throw new RefError('The part that should move lies on the fold line, so the fold has no side to move. Check that "bring" and "to" are different.');
+  }
+  const side = Math.sign(dist);
+  // Turn so the moving side rises toward `lift`. Rotating the n side about `axis` heads toward -lift,
+  // so flip the axis when the moving side is +n. One sign decides both side and direction.
+  if (side > 0) axis.negate();
   const prof = o.prof ?? linear;
   const op: Op = {
     kind: o.kind, id: o.id, pivot: pa, axis, angle: o.angle * DEG, tr: null, lift, prof,
@@ -130,6 +140,7 @@ function solveFold(f: FoldSpec, faces: Face[], ctx: RefContext): Line {
   const bisector = (p: Vector3, q: Vector3): Line => {
     const mid = xz(p).add(xz(q)).multiplyScalar(0.5);
     const d = xz(q).sub(xz(p));
+    if (d.length() < 1e-6) throw new RefError(`"${f.bring}" is already at "${f.to}", so there's nothing to fold.`);
     const perp = new Vector3(-d.z, 0, d.x).normalize();
     return { a: mid, b: mid.clone().add(perp), mover: xz(p) };
   };
@@ -160,6 +171,7 @@ function solveFold(f: FoldSpec, faces: Face[], ctx: RefContext): Line {
     const midA = a0.clone().add(a1).multiplyScalar(0.5);
     if (Math.abs(cross) < 1e-6) {
       const proj = b0.clone().addScaledVector(uB, a0.clone().sub(b0).dot(uB));
+      if (a0.distanceTo(proj) < 1e-4) throw new RefError(`"${f.bring}" already lies along "${f.to}", so there's nothing to fold.`);
       const mid = a0.clone().add(proj).multiplyScalar(0.5);
       return { a: mid, b: mid.clone().add(uA), mover: midA };
     }
@@ -245,7 +257,10 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
         }
       }
     }
-    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper.`);
+    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along}".`);
+    if (chosen.size === split.length && k === 0 && folds.length === 1) {
+      throw new RefError('This fold moves all of the paper, so the fold line misses the sheet. Check the points, or use "flip" to turn the model over.');
+    }
 
     // Undo splits that didn't end up moving, so untouched layers don't get phantom creases.
     const groups = new Map<Face, Face[]>();
@@ -302,6 +317,8 @@ function compileFlip(spec: StepSpec, index: number, start: Face[]): Step {
     : { a: new Vector3(minX, 0, cz), b: new Vector3(maxX, 0, cz), mover: new Vector3(cx, 0, maxZ) };
   const { op } = makeOp(line, { kind: 'flip', angle: 180 });
   op.moving = faces.map(() => true);
+  // Turning over about the middle would dip one half into the table; lift it while it turns.
+  op.hop = axis === 'long' ? (maxX - minX) / 2 : (maxZ - minZ) / 2;
   land([op], faces);
   return finish(index, spec, 'table', faces, [op]);
 }
@@ -360,31 +377,47 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
 
 /* ---------- entry point ---------- */
 
-/** Compile a plane recipe into steps the renderer can scrub through. Throws PlaneError with the step number on problems. */
-export function compilePlane(spec: PlaneSpec): CompiledPlane {
+/**
+ * Compile as far as the recipe works. Each step is checked against the physical rules as soon as
+ * it's built, so a later step never builds on a broken one. Returns the steps that worked and,
+ * if it stopped early, why.
+ */
+export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; error?: PlaneError } {
+  const steps: Step[] = [];
   const problems = validatePlane(spec);
-  if (problems.length) throw new PlaneError(problems[0].step, problems[0].message);
-  const { W, H } = paperSize(spec.paper);
-  const flyHeight = H / 3;
+  const first = problems[0];
+  // A problem in step N still lets steps before N fold, so a broken recipe can be reviewed up to the break.
+  const stopAt = first ? (first.step ?? 0) : spec.steps.length;
+  const { W, H } = first?.step == null && first ? { W: 21, H: 29.7 } : paperSize(spec.paper);
+  const plane: CompiledPlane = {
+    spec, width: W, height: H, flyHeight: H / 3, steps,
+    done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
+  };
   const ctx: RefContext = { W, H, creases: new Map() };
   let faces = [new Face([[0, 0], [W, 0], [W, H], [0, H]])];
-  const steps: Step[] = [];
-  spec.steps.forEach((s, i) => {
+  for (let i = 0; i < stopAt; i++) {
+    const s = spec.steps[i];
     try {
-      const st = s.pose ? compilePose(s, i, faces, ctx, W, H, flyHeight)
+      const st = s.pose ? compilePose(s, i, faces, ctx, W, H, plane.flyHeight)
         : s.flip ? compileFlip(s, i, faces)
         : compileFolds(s, i, faces, ctx);
+      // Physical checks: refuse anything a real sheet of paper couldn't do.
+      const issues = auditStep(plane, st);
+      if (issues.length) throw new PlaneError(i, issues[0].message);
       steps.push(st);
       faces = st.end;
     } catch (e) {
-      if (e instanceof PlaneError) throw e;
-      throw new PlaneError(i, (e as Error).message);
+      return { plane, error: e instanceof PlaneError ? e : new PlaneError(i, (e as Error).message) };
     }
-  });
-  return {
-    spec, width: W, height: H, flyHeight, steps,
-    done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
-  };
+  }
+  return first ? { plane, error: new PlaneError(first.step, first.message) } : { plane };
+}
+
+/** Compile a plane recipe into steps the renderer can scrub through. Throws PlaneError with the step number on problems. */
+export function compilePlane(spec: PlaneSpec): CompiledPlane {
+  const { plane, error } = compilePlaneSoFar(spec);
+  if (error) throw error;
+  return plane;
 }
 
 /** A fold arrow for op k: a path in the table frame, floating just above the paper. */

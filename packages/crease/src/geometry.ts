@@ -103,6 +103,28 @@ export function flatToWorld(p: Vec2, faces: Face[]): Vector3 {
   return flatToLocal(p).applyMatrix4(face!.M);
 }
 
+/** The stretches of edge two faces share in flat coordinates (where the paper connects them). */
+export function sharedSegments(a: Face, b: Face): [Vec2, Vec2][] {
+  const out: [Vec2, Vec2][] = [];
+  for (let i = 0; i < a.poly.length; i++) {
+    const p0 = a.poly[i], p1 = a.poly[(i + 1) % a.poly.length];
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy);
+    if (len < 1e-9) continue;
+    const ux = dx / len, uy = dy / len;
+    for (let j = 0; j < b.poly.length; j++) {
+      const q0 = b.poly[j], q1 = b.poly[(j + 1) % b.poly.length];
+      const c0 = ux * (q0[1] - p0[1]) - uy * (q0[0] - p0[0]);
+      const c1 = ux * (q1[1] - p0[1]) - uy * (q1[0] - p0[0]);
+      if (Math.abs(c0) > 1e-6 || Math.abs(c1) > 1e-6) continue;
+      const t0 = ux * (q0[0] - p0[0]) + uy * (q0[1] - p0[1]);
+      const t1 = ux * (q1[0] - p0[0]) + uy * (q1[1] - p0[1]);
+      const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(len, Math.max(t0, t1));
+      if (hi - lo > 1e-6) out.push([[p0[0] + ux * lo, p0[1] + uy * lo], [p0[0] + ux * hi, p0[1] + uy * hi]]);
+    }
+  }
+  return out;
+}
+
 /** Two faces share a stretch of edge in flat coordinates, i.e. the paper connects them. */
 export function adjacent(a: Face, b: Face): boolean {
   const ea = a.poly.map((p, i) => [p, a.poly[(i + 1) % a.poly.length]] as const);

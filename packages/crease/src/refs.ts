@@ -92,13 +92,16 @@ export function resolve(ref: string, faces: Face[], ctx: RefContext): Resolved {
     case 'edge':
     case 'crease': {
       // A crease can span several layers; use its longest piece as it lies right now.
-      let best: Resolved | null = null, bestLen = -1;
-      for (const [p, q] of flatSegments(ref, ctx)) {
-        const a = flatToWorld(p, faces), b = flatToWorld(q, faces);
-        const l = lenXZ(a, b);
-        if (l > bestLen) { bestLen = l; best = { kind: 'line', a, b }; }
+      const pieces = flatSegments(ref, ctx).map(([p, q]) => [flatToWorld(p, faces), flatToWorld(q, faces)] as const);
+      let best = pieces[0];
+      for (const pc of pieces) if (lenXZ(pc[0], pc[1]) > lenXZ(best[0], best[1])) best = pc;
+      // Every piece must still lie on that one line, or the reference is ambiguous.
+      const [a, b] = best, ux = b.x - a.x, uz = b.z - a.z, ul = Math.hypot(ux, uz);
+      const off = (v: Vector3) => Math.abs(((v.x - a.x) * uz - (v.z - a.z) * ux) / ul);
+      if (ul > 1e-9 && pieces.some(([p, q]) => off(p) > 1e-3 || off(q) > 1e-3)) {
+        throw new RefError(`"${ref}" is now in more than one place, because the layers it was made on have been folded apart. Point at another line, or give a later fold its own id.`);
       }
-      return best!;
+      return { kind: 'line', a, b };
     }
     default:
       throw new RefError(`Unknown reference type "${kind}" in "${ref}".`);

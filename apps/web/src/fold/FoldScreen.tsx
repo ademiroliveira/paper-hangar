@@ -71,6 +71,9 @@ export function FoldScreen({ plane }: { plane: CompiledPlane }) {
           <Chevron dir="left" /> Hangar
         </Button>
         <span className="truncate text-sm text-muted">{plane.spec.name}</span>
+        <Button variant="ghost" size="sm" className="ml-auto" onPress={() => { window.location.hash = `#/plane/${plane.spec.id}/steps`; }}>
+          All steps
+        </Button>
       </nav>
 
       <header className="px-5 pb-1 pt-2 [grid-area:head] wide:px-7 wide:pt-4">
