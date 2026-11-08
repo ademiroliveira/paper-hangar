@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ademiroliveira.github.io/paper-hangar/plane.schema.json",
+  "title": "Paper Hangar plane",
+  "description": "A paper airplane written as a list of folds. The crease engine turns it into 3D steps.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "paper",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "File-safe id, e.g. classic-dart."
+    },
+    "name": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "description": "One line for the hangar card."
+    },
+    "difficulty": {
+      "enum": [
+        1,
+        2,
+        3
+      ],
+      "description": "1 easy, 2 medium, 3 tricky."
+    },
+    "author": {
+      "type": "string"
+    },
+    "paper": {
+      "description": "Sheet size. Custom sizes are in centimetres, portrait.",
+      "oneOf": [
+        {
+          "enum": [
+            "A4",
+            "Letter"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "height": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "done": {
+      "type": "object",
+      "required": [
+        "title",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fold": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Say it like an instruction: bring X to Y (through Z), or fold along a line and move one side.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Names the crease this fold makes, so later steps can use crease:<id>."
+        },
+        "bring": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "The point or line that moves."
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "Where it lands: a point or a line."
+        },
+        "through": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "A point the fold passes through. Needed when bringing a point onto a line."
+        },
+        "along": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "Fold along this existing line."
+        },
+        "move": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "With along: a point on the side that moves."
+        },
+        "layers": {
+          "enum": [
+            "all",
+            "top"
+          ],
+          "default": "all",
+          "description": "top folds only the uppermost flap."
+        },
+        "unfold": {
+          "type": "boolean",
+          "description": "Fold, crease, then open it flat again."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "bring",
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "along",
+            "move"
+          ]
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "fold": {
+          "$ref": "#/$defs/fold"
+        },
+        "folds": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/fold"
+          },
+          "description": "Folds that happen at the same time."
+        },
+        "flip": {
+          "oneOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "axis": {
+                  "enum": [
+                    "long",
+                    "short"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "pose": {
+          "type": "object",
+          "required": [
+            "type",
+            "spine",
+            "keel",
+            "wings"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "flight"
+            },
+            "spine": {
+              "type": "string",
+              "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+              "description": "The line the wings hinge on."
+            },
+            "keel": {
+              "type": "string",
+              "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+              "description": "The bottom fold of the body."
+            },
+            "wings": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "description": "Ids of the wing folds."
+            },
+            "dihedral": {
+              "type": "number",
+              "minimum": -20,
+              "maximum": 30,
+              "default": 6,
+              "description": "Upward wing tilt in degrees."
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "fold"
+          ]
+        },
+        {
+          "required": [
+            "folds"
+          ]
+        },
+        {
+          "required": [
+            "flip"
+          ]
+        },
+        {
+          "required": [
+            "pose"
+          ]
+        }
+      ]
+    }
+  }
+}

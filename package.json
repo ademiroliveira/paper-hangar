@@ -1,0 +1,14 @@
+{
+  "name": "paper-hangar",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @paper-hangar/web",
+    "build": "npm run build -w @paper-hangar/web",
+    "preview": "npm run preview -w @paper-hangar/web",
+    "test": "npm test -w @paper-hangar/crease",
+    "typecheck": "npm run typecheck -w @paper-hangar/crease && npm run typecheck -w @paper-hangar/web"
+  },
+  "engines": { "node": ">=20" }
+}

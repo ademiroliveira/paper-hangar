@@ -1,0 +1,60 @@
+{
+  "$schema": "../packages/crease/plane.schema.json",
+  "id": "classic-dart",
+  "name": "Classic dart",
+  "summary": "The one everyone learns first. Fast, straight and forgiving.",
+  "difficulty": 1,
+  "paper": "A4",
+  "steps": [
+    {
+      "title": "Crease the middle",
+      "text": "Fold the sheet in half the long way, press a sharp crease, then open it flat again.",
+      "fold": { "id": "center", "bring": "edge:left", "to": "edge:right", "unfold": true }
+    },
+    {
+      "title": "Fold the top corners in",
+      "text": "Bring each top corner down to the center crease.",
+      "folds": [
+        { "id": "corner-left", "bring": "corner:top-left", "to": "crease:center", "through": "mid:edge:top" },
+        { "id": "corner-right", "bring": "corner:top-right", "to": "crease:center", "through": "mid:edge:top" }
+      ]
+    },
+    {
+      "title": "Fold the edges in again",
+      "text": "Fold each slanted edge to the center crease. Keep the point sharp.",
+      "folds": [
+        { "id": "edge-left", "bring": "crease:corner-left", "to": "crease:center" },
+        { "id": "edge-right", "bring": "crease:corner-right", "to": "crease:center" }
+      ]
+    },
+    {
+      "title": "Fold in half",
+      "text": "Fold the left half over onto the right, along the center crease.",
+      "fold": { "along": "crease:center", "move": "corner:bottom-left" }
+    },
+    {
+      "title": "Fold the first wing",
+      "text": "Fold the top layer over so its long edge meets the folded edge.",
+      "fold": { "id": "wing-1", "bring": "crease:edge-left", "to": "crease:center", "layers": "top" }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the plane so the other side faces up.",
+      "flip": true
+    },
+    {
+      "title": "Fold the second wing",
+      "text": "Same fold on this side: long edge to the folded edge.",
+      "fold": { "id": "wing-2", "bring": "crease:edge-right", "to": "crease:center", "layers": "top" }
+    },
+    {
+      "title": "Open the wings",
+      "text": "Lift both wings until they sit level, angled slightly up.",
+      "pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }
+    }
+  ],
+  "done": {
+    "title": "Ready to fly",
+    "text": "Hold the body just behind the nose and throw gently, straight ahead."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@paper-hangar/crease",
+  "version": "0.1.0",
+  "description": "Rigid paper-folding engine: compiles plane recipes (JSON) into animatable fold steps.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plane.schema.json": "./plane.schema.json"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.187.0",
+    "ajv": "^8.20.0",
+    "three": "^0.187.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
