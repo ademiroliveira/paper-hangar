@@ -58,22 +58,29 @@ describe('classic dart recipe', () => {
     expect(distToAxis(st, 1, P(W, V_L3))).toBeLessThan(1e-6);
   });
 
-  it('folds only the top flap for the first wing, along the right line', () => {
+  /** Wing folds must take every layer of the top half on the far side of the crease, and nothing else. */
+  function checkWing(si: number, half: 'left' | 'right') {
+    const st = plane.steps[si], op = st.ops[0];
+    const n = new Vector3().crossVectors(op.axis, op.lift).normalize();
+    const movedIdx = op.moving.findIndex(Boolean);
+    expect(movedIdx).toBeGreaterThanOrEqual(0);
+    const far = Math.sign(st.faces[movedIdx].centroidWorld().sub(op.pivot).dot(n));
+    st.faces.forEach((f, i) => {
+      const onFar = Math.sign(f.centroidWorld().sub(op.pivot).dot(n)) === far;
+      const inHalf = half === 'left' ? f.centroidFlat()[0] < C : f.centroidFlat()[0] > C;
+      expect(op.moving[i], `face ${i} (flat centroid ${f.centroidFlat().map(x => x.toFixed(1))})`).toBe(onFar && inHalf);
+    });
+  }
+
+  it('folds the whole top half for the first wing, along the right line', () => {
     const st = plane.steps[4];
     expect(distToAxis(st, 0, P(C, H))).toBeLessThan(1e-6);
     expect(distToAxis(st, 0, P(U_TAIL, 0))).toBeLessThan(1e-6);
-    st.faces.forEach((f, i) => {
-      if (st.ops[0].moving[i]) expect(f.centroidFlat()[0]).toBeLessThan(C);
-    });
-    expect(st.ops[0].moving.some(Boolean)).toBe(true);
+    checkWing(4, 'left');
   });
 
-  it('folds only the top flap for the second wing, after the flip', () => {
-    const st = plane.steps[6];
-    st.faces.forEach((f, i) => {
-      if (st.ops[0].moving[i]) expect(f.centroidFlat()[0]).toBeGreaterThan(C);
-    });
-    expect(st.ops[0].moving.some(Boolean)).toBe(true);
+  it('folds the whole top half for the second wing, after the flip', () => {
+    checkWing(6, 'right');
   });
 
   it('stacks layers without overlap: every landed flap sits above the paper below it', () => {

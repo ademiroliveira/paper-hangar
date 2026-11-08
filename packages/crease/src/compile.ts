@@ -1,5 +1,5 @@
 import { Matrix4, Vector3 } from 'three';
-import { EPS, Face, components, flatToLocal, splitFace } from './geometry';
+import { EPS, Face, components, flatToLocal, overlapsFromAbove, splitFace } from './geometry';
 import { RefError, resolve, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
@@ -227,12 +227,23 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     const moving = split.filter(onSide);
     let chosen = new Set(moving);
     if (f.layers === 'top' && moving.length) {
+      const comps = components(moving);
       let best: Face[] = [], bestH = -Infinity;
-      for (const c of components(moving)) {
+      for (const c of comps) {
         const h = Math.max(...c.map(x => x.maxY()));
         if (h > bestH) { bestH = h; best = c; }
       }
       chosen = new Set(best);
+      // Paper lying above or between layers that lift has to lift too, even when it only connects
+      // to them on the other side of the fold (e.g. a corner flap tucked inside a wing).
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const c of comps) {
+          if (c.some(x => chosen.has(x))) continue;
+          const trapped = c.some(x => [...chosen].some(g => x.maxY() > g.maxY() + GAP / 2 && overlapsFromAbove(x, g)));
+          if (trapped) { c.forEach(x => chosen.add(x)); grew = true; }
+        }
+      }
     }
     if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper.`);
 

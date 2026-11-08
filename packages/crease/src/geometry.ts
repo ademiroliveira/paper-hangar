@@ -124,6 +124,22 @@ export function adjacent(a: Face, b: Face): boolean {
   return false;
 }
 
+/** Do two faces cover some of the same table area (seen from above)? Convex polygons, separating-axis test. */
+export function overlapsFromAbove(a: Face, b: Face, eps = 1e-4): boolean {
+  const pa = a.world().map(v => [v.x, v.z] as Vec2), pb = b.world().map(v => [v.x, v.z] as Vec2);
+  for (const poly of [pa, pb]) {
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      const nx = q[1] - p[1], ny = p[0] - q[0], len = Math.hypot(nx, ny);
+      if (len < 1e-9) continue;
+      const proj = (s: Vec2[]) => s.map(r => (r[0] * nx + r[1] * ny) / len);
+      const A = proj(pa), B = proj(pb);
+      if (Math.max(...A) <= Math.min(...B) + eps || Math.max(...B) <= Math.min(...A) + eps) return false;
+    }
+  }
+  return true;
+}
+
 /** Group faces into flaps: sets connected through the paper. */
 export function components(faces: Face[]): Face[][] {
   const seen = new Set<Face>(), out: Face[][] = [];
