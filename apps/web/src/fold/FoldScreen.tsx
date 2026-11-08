@@ -14,6 +14,13 @@ function Chevron({ dir }: { dir: 'left' | 'right' }) {
     </svg>
   );
 }
+function ResetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" />
+    </svg>
+  );
+}
 function PlayIcon() {
   return <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>;
 }
@@ -128,6 +135,18 @@ export function FoldScreen({ plane }: { plane: CompiledPlane }) {
         >
           Drag the paper along the <b className="text-accent">orange arrow</b>
         </div>
+        {player.s.viewChanged && (
+          <Button
+            isIconOnly
+            variant="tertiary"
+            size="sm"
+            aria-label="Reset view"
+            onPress={() => player.resetView()}
+            className="absolute bottom-3 right-3 bg-[rgb(12_30_25/0.78)] backdrop-blur"
+          >
+            <ResetIcon />
+          </Button>
+        )}
       </main>
 
       <footer className="grid gap-2.5 px-5 pb-[calc(16px+env(safe-area-inset-bottom))] pt-1.5 [grid-area:controls] wide:px-7 wide:pb-[calc(24px+env(safe-area-inset-bottom))]">

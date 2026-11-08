@@ -12,6 +12,10 @@ export interface PlayerState {
   /** The person has folded something by dragging the paper (used to retire the hint). */
   foldedByHand: boolean;
   anim: Anim | null;
+  /** The camera has been turned or zoomed away from the step's default view. */
+  viewChanged: boolean;
+  /** Set by the UI, consumed by the scene. */
+  resetViewRequested: boolean;
 }
 
 const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
@@ -22,7 +26,7 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
  * Kept outside React state so dragging stays smooth.
  */
 function createPlayer(render: () => void) {
-  const s: PlayerState = { step: 0, t: 0, dragging: false, foldedByHand: false, anim: null };
+  const s: PlayerState = { step: 0, t: 0, dragging: false, foldedByHand: false, anim: null, viewChanged: false, resetViewRequested: false };
   return {
     s,
     setT(v: number) { s.t = clamp01(v); render(); },
@@ -43,6 +47,8 @@ function createPlayer(render: () => void) {
     },
     setDragging(d: boolean) { s.dragging = d; render(); },
     markFoldedByHand() { if (!s.foldedByHand) { s.foldedByHand = true; render(); } },
+    setViewChanged(v: boolean) { if (s.viewChanged !== v) { s.viewChanged = v; render(); } },
+    resetView() { s.resetViewRequested = true; },
   };
 }
 export type Player = ReturnType<typeof createPlayer>;

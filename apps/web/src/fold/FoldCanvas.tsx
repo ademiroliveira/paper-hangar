@@ -27,7 +27,7 @@ export const FoldCanvas = memo(function FoldCanvas(props: Props) {
       flat
       shadows={{ type: THREE.PCFShadowMap }}
       dpr={[1, 2]}
-      camera={{ fov: 42, near: 0.5, far: 600, position: [0, 50, 50] }}
+      camera={{ fov: 42, near: 1, far: 600, position: [0, 50, 50] }}
       gl={{ antialias: true }}
       style={{ touchAction: 'none' }}
       aria-label="3D paper model. Drag the paper along the orange arrow to fold it. Drag anywhere else to turn the view; pinch to zoom."
@@ -63,8 +63,12 @@ function matTexture(gl: THREE.WebGLRenderer) {
 
 function buildWorld(W: number, H: number, FLY: number, gl: THREE.WebGLRenderer) {
   const root = new THREE.Group();
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x2a4a40, 1.6);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.9);
+  // Paper is matte and bright from every side: strong sky light, a key light that casts the shadow,
+  // and a soft fill from the opposite side so a lifted flap still reads as white paper, not grey.
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x3c5a50, 2.3);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.9);
+  fill.position.set(18, 14, -14);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 140 });
@@ -74,7 +78,8 @@ function buildWorld(W: number, H: number, FLY: number, gl: THREE.WebGLRenderer) 
   // Cutting mat with a 1 cm grid; the sheet sits squared to a grid corner.
   const mat = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), new THREE.MeshStandardMaterial({ map: matTexture(gl), roughness: 0.95 }));
   mat.rotation.x = -Math.PI / 2;
-  mat.position.set(-W / 2, -0.03, H / 2);
+  // A visible-but-tiny gap under the sheet keeps the mat from bleeding through at low viewing angles.
+  mat.position.set(-W / 2, -0.08, H / 2);
   mat.receiveShadow = true;
 
   // rig (idle float when finished) > paperGroup (the engine's table frame) > overlay (diagram marks)
@@ -85,9 +90,12 @@ function buildWorld(W: number, H: number, FLY: number, gl: THREE.WebGLRenderer) 
   rig.add(paperGroup);
   const overlay = new THREE.Group();
   paperGroup.add(overlay);
-  root.add(hemi, sun, sun.target, mat, rig);
+  root.add(hemi, fill, sun, sun.target, mat, rig);
 
-  const paperOpts = { vertexColors: true, roughness: 0.88, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+  // Push the paper back by a constant few depth units so edge lines win ties. No slope factor:
+  // at grazing angles a slope-scaled offset grows large enough to sink the paper below the mat
+  // (that showed up as mat stripes across the paper on iPhone).
+  const paperOpts = { vertexColors: true, roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 3 };
   const materials = {
     front: new THREE.MeshStandardMaterial({ ...paperOpts, side: THREE.FrontSide, shadowSide: THREE.DoubleSide }),
     back: new THREE.MeshStandardMaterial({ ...paperOpts, side: THREE.BackSide }),
@@ -293,16 +301,32 @@ function Scene({ plane, player, step: stepIndex }: Props) {
     if (meshes.current) fit(meshes.current.step, size.width / Math.max(1, size.height));
   }, [size.width, size.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---------- gestures: grab the paper to fold it; drag elsewhere to orbit; pinch to zoom ---------- */
+  /* ---------- gestures ----------
+     One finger on the paper folds it: the paper that moves follows your finger; starting on paper
+     that stays put still folds, by how far you drag along the fold. One finger on the mat turns the
+     view. Two fingers turn and zoom. Double-tap the mat to reset the view. */
   useEffect(() => {
     const el = gl.domElement;
     const raycaster = new THREE.Raycaster();
-    const pointers = new Map<number, { x: number; y: number }>();
+    type Pt = { x: number; y: number };
+    const pointers = new Map<number, Pt>();
     let mode: 'fold' | 'orbit' | 'pinch' | null = null;
-    let grab: { fi: number; local: THREE.Vector3 } | null = null;
+    let grab: { fi: number; local: THREE.Vector3; direct: boolean } | null = null;
     let pinch0 = { d: 1, zoom: 1 };
-    const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+    let pinchMid: Pt = { x: 0, y: 0 };
+    let downAt: Pt & { time: number } = { x: 0, y: 0, time: 0 };
+    let lastTap = 0;
+    const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+    const mid = (a: Pt, b: Pt) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const lastIndex = plane.steps.length - 1;
+    const canFold = () => !!meshes.current && !(meshes.current.index === lastIndex && player.s.t >= 0.999);
 
+    const toScreen = (local: THREE.Vector3, fi: number, t: number, rect: DOMRect) => {
+      const st = meshes.current!.step;
+      const p = local.clone().applyMatrix4(faceMatrix(st, fi, stepMatrices(st, t)));
+      world.paperGroup.localToWorld(p).project(cam3);
+      return { x: ((p.x + 1) / 2) * rect.width + rect.left, y: ((1 - p.y) / 2) * rect.height + rect.top };
+    };
     const pick = (x: number, y: number) => {
       const m = meshes.current;
       if (!m) return null;
@@ -314,69 +338,102 @@ function Scene({ plane, player, step: stepIndex }: Props) {
       if (!hits.length || hits[0].faceIndex == null) return null;
       return { fi: m.triFace[hits[0].faceIndex], point: hits[0].point };
     };
-    const lastIndex = plane.steps.length - 1;
-    const canGrab = (fi: number) => {
-      const m = meshes.current!;
-      return m.step.movingAny[fi] && !(m.index === lastIndex && player.s.t >= 0.999);
-    };
-    const tFromPointer = (c: { x: number; y: number }) => {
+    /** Started on paper that doesn't move: hold the moving piece nearest the finger instead. */
+    const nearestMoving = (x: number, y: number) => {
       const m = meshes.current!, st = m.step, rect = el.getBoundingClientRect();
-      const px = c.x - rect.left, py = c.y - rect.top, N = 64;
-      const pts: { x: number; y: number }[] = [];
-      for (let i = 0; i <= N; i++) {
-        const p = grab!.local.clone().applyMatrix4(faceMatrix(st, grab!.fi, stepMatrices(st, i / N)));
-        world.paperGroup.localToWorld(p).project(cam3);
-        pts.push({ x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height });
-      }
-      const cur = player.s.t;
+      let best: { fi: number; local: THREE.Vector3; d: number } | null = null;
+      st.faces.forEach((f, i) => {
+        if (!st.movingAny[i]) return;
+        const [cx, cy] = f.centroidFlat();
+        const local = new THREE.Vector3(cx, 0, -cy);
+        const s = toScreen(local, i, player.s.t, rect);
+        const d = Math.hypot(s.x - x, s.y - y);
+        if (!best || d < best.d) best = { fi: i, local, d };
+      });
+      return best as { fi: number; local: THREE.Vector3 } | null;
+    };
+
+    /** Direct grab: the held point follows the finger (nearest point on its path). */
+    const tDirect = (c: Pt) => {
+      const rect = el.getBoundingClientRect(), N = 64, cur = player.s.t;
+      const pts = Array.from({ length: N + 1 }, (_, i) => toScreen(grab!.local, grab!.fi, i / N, rect));
       let best = { d: Infinity, t: cur };
       for (let i = 0; i < N; i++) {
         const t0 = i / N, t1 = (i + 1) / N;
         if (t1 < cur - 0.3 || t0 > cur + 0.3) continue;
         const a = pts[i], b = pts[i + 1], abx = b.x - a.x, aby = b.y - a.y, L2 = abx * abx + aby * aby;
-        const u = L2 > 1e-6 ? clamp(((px - a.x) * abx + (py - a.y) * aby) / L2, 0, 1) : 0;
-        const d = (px - a.x - abx * u) ** 2 + (py - a.y - aby * u) ** 2;
+        const u = L2 > 1e-6 ? clamp(((c.x - a.x) * abx + (c.y - a.y) * aby) / L2, 0, 1) : 0;
+        const d = (c.x - a.x - abx * u) ** 2 + (c.y - a.y - aby * u) ** 2;
         if (d < best.d) best = { d, t: t0 + (t1 - t0) * u };
       }
       return best.t;
     };
+    /** Indirect grab: move along the fold by how far the finger travels in the fold's direction. */
+    const tIndirect = (prev: Pt, c: Pt) => {
+      const rect = el.getBoundingClientRect(), cur = player.s.t, h = 0.02;
+      const t0 = Math.max(0, Math.min(cur, 1 - h)), t1 = t0 + h;
+      const a = toScreen(grab!.local, grab!.fi, t0, rect), b = toScreen(grab!.local, grab!.fi, t1, rect);
+      const vx = (b.x - a.x) / h, vy = (b.y - a.y) / h, v2 = vx * vx + vy * vy;
+      if (v2 < 1e-3) return cur;
+      const dt = ((c.x - prev.x) * vx + (c.y - prev.y) * vy) / v2;
+      return clamp(cur + clamp(dt, -0.25, 0.25), 0, 1);
+    };
 
+    const startPinch = () => {
+      const [a, b] = [...pointers.values()];
+      mode = 'pinch';
+      pinch0 = { d: dist(a, b), zoom: cam.current.zoom };
+      pinchMid = mid(a, b);
+    };
     const down = (e: PointerEvent) => {
       el.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
+        downAt = { x: e.clientX, y: e.clientY, time: performance.now() };
         const hit = pick(e.clientX, e.clientY);
-        if (hit && canGrab(hit.fi)) {
-          player.stop();
+        if (hit && canFold()) {
           const st = meshes.current!.step;
-          const inv = faceMatrix(st, hit.fi, stepMatrices(st, player.s.t)).invert();
-          grab = { fi: hit.fi, local: world.paperGroup.worldToLocal(hit.point.clone()).applyMatrix4(inv) };
-          mode = 'fold';
-          el.style.cursor = 'grabbing';
-          player.setDragging(true);
-        } else mode = 'orbit';
-      } else if (pointers.size === 2 && mode !== 'fold') {
-        const [a, b] = [...pointers.values()];
-        mode = 'pinch';
-        pinch0 = { d: dist(a, b), zoom: cam.current.zoom };
-      }
+          let g: { fi: number; local: THREE.Vector3; direct: boolean } | null = null;
+          if (st.movingAny[hit.fi]) {
+            const inv = faceMatrix(st, hit.fi, stepMatrices(st, player.s.t)).invert();
+            g = { fi: hit.fi, local: world.paperGroup.worldToLocal(hit.point.clone()).applyMatrix4(inv), direct: true };
+          } else {
+            const n = nearestMoving(e.clientX, e.clientY);
+            if (n) g = { ...n, direct: false };
+          }
+          if (g) {
+            player.stop();
+            grab = g;
+            mode = 'fold';
+            el.style.cursor = 'grabbing';
+            player.setDragging(true);
+            return;
+          }
+        }
+        mode = 'orbit';
+      } else if (pointers.size === 2 && mode !== 'fold') startPinch();
     };
     const move = (e: PointerEvent) => {
       if (!pointers.has(e.pointerId)) return;
       const prev = pointers.get(e.pointerId)!, cur = { x: e.clientX, y: e.clientY };
       pointers.set(e.pointerId, cur);
       const c = cam.current;
-      if (mode === 'fold') player.setT(tFromPointer(cur));
+      if (mode === 'fold' && grab) player.setT(grab.direct ? tDirect(cur) : tIndirect(prev, cur));
       else if (mode === 'orbit') {
         c.goal.theta -= (cur.x - prev.x) * 0.008;
         c.goal.phi = clamp(c.goal.phi - (cur.y - prev.y) * 0.008, 0.12, 1.42);
       } else if (mode === 'pinch' && pointers.size >= 2) {
         const [a, b] = [...pointers.values()];
+        const m2 = mid(a, b);
         c.zoom = clamp((pinch0.zoom * pinch0.d) / Math.max(10, dist(a, b)), 0.45, 2.5);
+        c.goal.theta -= (m2.x - pinchMid.x) * 0.008;
+        c.goal.phi = clamp(c.goal.phi - (m2.y - pinchMid.y) * 0.008, 0.12, 1.42);
+        pinchMid = m2;
       }
     };
     const up = (e: PointerEvent) => {
       if (!pointers.has(e.pointerId)) return;
+      const at = pointers.get(e.pointerId)!;
       pointers.delete(e.pointerId);
       if (mode === 'fold') {
         mode = null; grab = null; el.style.cursor = '';
@@ -384,14 +441,20 @@ function Scene({ plane, player, step: stepIndex }: Props) {
         if (player.s.t > 0.5) player.markFoldedByHand();
         if (player.s.t > 0.93) player.animateTo(1, 220);
         else if (player.s.t < 0.05) player.animateTo(0, 180);
+      } else if (mode === 'orbit' && pointers.size === 0) {
+        // a tap (no drag) on the mat: two in quick succession resets the view
+        const now = performance.now();
+        if (dist(at, downAt) < 8 && now - downAt.time < 300) {
+          if (now - lastTap < 350) { player.resetView(); lastTap = 0; } else lastTap = now;
+        }
+        mode = null;
       } else if (pointers.size === 0) mode = null;
-      else if (mode === 'pinch') mode = 'orbit';
+      else if (mode === 'pinch' && pointers.size === 1) mode = 'orbit';
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       cam.current.zoom = clamp(cam.current.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 2.5);
     };
-    const dbl = () => { if (meshes.current) setView(meshes.current.step.view); };
 
     el.style.cursor = 'grab';
     el.addEventListener('pointerdown', down);
@@ -399,14 +462,12 @@ function Scene({ plane, player, step: stepIndex }: Props) {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', wheel, { passive: false });
-    el.addEventListener('dblclick', dbl);
     return () => {
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
       el.removeEventListener('wheel', wheel);
-      el.removeEventListener('dblclick', dbl);
     };
   }, [gl, cam3, world, player, plane]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -443,6 +504,10 @@ function Scene({ plane, player, step: stepIndex }: Props) {
     world.rig.rotation.x = Math.sin(s * 1.3 + 0.8) * 0.025 * k;
 
     const c = cam.current, a = 1 - Math.exp(-dt * 9);
+    if (player.s.resetViewRequested) { player.s.resetViewRequested = false; setView(m.step.view); }
+    const v = VIEWS[m.step.view], twoPi = Math.PI * 2;
+    const dTheta = Math.abs(((((c.goal.theta - v.theta) % twoPi) + 3 * Math.PI) % twoPi) - Math.PI);
+    player.setViewChanged(dTheta > 0.08 || Math.abs(c.goal.phi - v.phi) > 0.08 || Math.abs(c.zoom - 1) > 0.08);
     c.theta += (c.goal.theta - c.theta) * a;
     c.phi += (c.goal.phi - c.phi) * a;
     c.r += (c.goal.r * c.zoom - c.r) * a;
