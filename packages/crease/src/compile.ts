@@ -3,7 +3,7 @@ import { EPS, Face, components, flatToLocal, overlapsFromAbove, splitFace } from
 import { RefError, resolve, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
-import { auditStep } from './audit';
+import { auditStep, type AuditIssue } from './audit';
 
 /** Visual paper thickness between stacked layers (cm). */
 export const GAP = 0.02;
@@ -51,10 +51,15 @@ export interface Step {
   end: Face[];
 }
 
+/** A crease made by a fold, with the step that made it (0-based). Unnamed folds get ids like `s3`. */
+export interface CreaseRecord { id: string; step: number; named: boolean; segs: [Vec2, Vec2][] }
+
 export interface CompiledPlane {
   spec: PlaneSpec;
   width: number;
   height: number;
+  /** Every crease made so far, in order. */
+  creases: CreaseRecord[];
   /** How high the finished plane floats above the table in the flight pose (cm). */
   flyHeight: number;
   steps: Step[];
@@ -62,8 +67,16 @@ export interface CompiledPlane {
 }
 
 export class PlaneError extends Error {
-  constructor(public step: number | null, message: string) {
+  /** `message` without the "Step N: " prefix. */
+  readonly detail: string;
+  constructor(
+    public step: number | null,
+    message: string,
+    /** When physical checks failed: every problem found in that step, not just the first. */
+    public issues: AuditIssue[] = [],
+  ) {
     super(step == null ? message : `Step ${step + 1}: ${message}`);
+    this.detail = message;
   }
 }
 
@@ -416,21 +429,24 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
   const stopAt = first ? (first.step ?? 0) : spec.steps.length;
   const { W, H } = first?.step == null && first ? { W: 21, H: 29.7 } : paperSize(spec.paper);
   const plane: CompiledPlane = {
-    spec, width: W, height: H, flyHeight: H / 3, steps,
+    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps,
     done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
   };
   const ctx: RefContext = { W, H, creases: new Map() };
   let faces = [new Face([[0, 0], [W, 0], [W, H], [0, H]])];
   for (let i = 0; i < stopAt; i++) {
     const s = spec.steps[i];
+    const known = new Set(ctx.creases.keys());
     try {
       const st = s.pose ? compilePose(s, i, faces, ctx, W, H, plane)
         : s.flip ? compileFlip(s, i, faces)
         : compileFolds(s, i, faces, ctx);
       // Physical checks: refuse anything a real sheet of paper couldn't do.
       const issues = auditStep(plane, st);
-      if (issues.length) throw new PlaneError(i, issues[0].message);
+      if (issues.length) throw new PlaneError(i, issues[0].message, issues);
       steps.push(st);
+      const named = new Set((s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id).filter(Boolean));
+      for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });
       faces = st.end;
     } catch (e) {
       return { plane, error: e instanceof PlaneError ? e : new PlaneError(i, (e as Error).message) };

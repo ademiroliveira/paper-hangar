@@ -50,9 +50,15 @@ export function projectStep(plane: CompiledPlane, index: number, t: number, view
       light: Math.min(1, Math.max(0, 0.55 + 0.45 * facing.dot(light))),
       moving: step.movingAny[i],
       depth: vs.reduce((s, v) => s + v.dot(z), 0) / vs.length,
+      height: vs.reduce((s, v) => s + v.y, 0) / vs.length,
+      flat: Math.abs(n.y) > 1 - 1e-6,
     };
   });
-  items.sort((a, b) => a.depth - b.depth);
+  // Stacked layers sit only GAP apart, so at an angle their average depth is decided by where they
+  // lie on the table, not which is on top. When everything lies flat, seen from above, the higher
+  // layer always covers the lower one: draw in height order. Otherwise fall back to depth.
+  const allFlat = phi < Math.PI / 2 && items.every(it => it.flat);
+  items.sort((a, b) => (allFlat ? a.height - b.height : a.depth - b.depth));
 
   const top = Math.max(...step.faces.map(f => f.maxY())) + 0.05;
   const creases: [Vec2, Vec2][] = t === 0
@@ -67,7 +73,7 @@ export function projectStep(plane: CompiledPlane, index: number, t: number, view
     Math.min(...all.map(p => p[0])), Math.min(...all.map(p => p[1])),
     Math.max(...all.map(p => p[0])), Math.max(...all.map(p => p[1])),
   ];
-  return { polygons: items.map(({ depth: _d, ...p }) => p), creases, arrows, bounds };
+  return { polygons: items.map(({ depth: _d, height: _h, flat: _f, ...p }) => p), creases, arrows, bounds };
 }
 
 /** The finished model (last step, fully folded). */

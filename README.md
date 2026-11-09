@@ -13,7 +13,8 @@ planes/*.plane.json      recipes: one file per plane, written like instructions
         │
 packages/crease          the fold engine (TypeScript, no UI): recipe → 3D fold steps
         │
-apps/web                 React + HeroUI v3 shell, React Three Fiber renderer
+        ├── apps/web               React + HeroUI v3 shell, React Three Fiber renderer
+        └── packages/crease-cli    `npx crease`: check, inspect and draw recipes
 ```
 
 - **The engine never knows about screens.** It turns a recipe into steps; each step is a set of flat paper faces plus rigid motions (rotate these faces about this crease, by this much). The renderer just asks "where is every face at 37% of step 4?"
@@ -23,9 +24,26 @@ apps/web                 React + HeroUI v3 shell, React Three Fiber renderer
 ## Adding a plane
 
 1. Create `planes/<id>.plane.json`. Add `"$schema": "../packages/crease/plane.schema.json"` at the top and your editor will autocomplete and check it.
-2. Run `npm run dev` and open the hangar. Your plane appears automatically. If a fold can't be solved, its card says which step and why, and **See the steps that work** shows every step up to the break.
-3. Check the drawings on the plane's **all steps** page (`#/plane/<id>/steps`): every step drawn from the recipe, with fold lines and arrows.
-4. Run `npm test`. CI runs the same checks on every push and only deploys if every plane folds.
+2. Run `npx crease check planes/<id>.plane.json`. It folds every step and lists every problem with its step number and a plain reason. `npx crease refs` shows what the next step can point at.
+3. Run `npm run dev` and open the hangar. Your plane appears automatically. Check the drawings on its **all steps** page (`#/plane/<id>/steps`). If a fold can't be solved, the card says which step and why, and **See the steps that work** shows every step up to the break.
+4. Run `npx crease previews` to draw `planes/previews/<id>.svg`, the one-page view reviewers see in a pull request.
+5. Run `npm test`. CI runs the same checks on every push and only deploys if every plane folds and every preview is current.
+
+To have Claude draft a plane for you, ask Claude Code in this repo to "draft a recipe for the Nakamura lock". The [`draft-plane` skill](.claude/skills/draft-plane/SKILL.md) writes the recipe, checks it with the commands below until it folds and matches the real plane, and opens a pull request.
+
+### The `crease` command
+
+| Command | What it does |
+| --- | --- |
+| `npx crease check <file…>` | Folds every step and runs the physical checks. Lists every problem with its step, kind and reason |
+| `npx crease validate <file…>` | Checks the recipe's shape only (JSON, schema, ids, references), without folding |
+| `npx crease refs <file> [--step n]` | Everything step n can point at, and where it is now. Defaults to the next step to write |
+| `npx crease describe <file> [--step n]` | The paper after step n: size, layers, which side is up, corners, creases. For a finished plane: wingspan, length, body depth, height |
+| `npx crease render <file> [--step n] [--png]` | Draws each step, the result of each step, a sheet of all steps and three views of the finished plane into `.crease/renders/<id>/` |
+| `npx crease compare <reference> <file>` | Measures two finished planes side by side and passes when they're within 10% |
+| `npx crease previews [--check]` | Redraws `planes/previews/` for every recipe, or checks they're current |
+
+Add `--json` to any command for output a script or an agent can read. Positions are in cm on the table: x to the right, y away from you, the same axes as the flat sheet before anything moves.
 
 ### Physical checks (every plane, every step)
 
@@ -73,6 +91,12 @@ A recipe lists steps. Each step does exactly one thing: `fold`, `folds` (several
 ```
 
 See [`planes/classic-dart.plane.json`](planes/classic-dart.plane.json) and [`planes/nakamura-lock.plane.json`](planes/nakamura-lock.plane.json) for complete planes.
+
+Three optional fields record where a recipe came from. The steps page shows the first two:
+
+- `"author"`: who designed the plane, when known.
+- `"sources"`: `[{ "title": …, "url": …, "note": "what was taken from it" }]`, the pages, books or videos the folds were checked against.
+- `"assumptions"`: every guess made while writing it, like reading "about an inch" as 2.5 cm on A4. Reviewers check these.
 
 ### Pointing at the paper
 

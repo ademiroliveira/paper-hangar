@@ -1,0 +1,27 @@
+{
+  "name": "@paper-hangar/crease-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command line for crease: check, inspect and render plane recipes. Built for people and agents writing recipes.",
+  "type": "module",
+  "bin": {
+    "crease": "./bin/crease.mjs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@paper-hangar/crease": "*",
+    "@resvg/resvg-js": "^2.6.2",
+    "ajv": "^8.20.0",
+    "three": "^0.187.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.187.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
