@@ -78,6 +78,23 @@ export function StepsSheet({ entry }: { entry: HangarEntry }) {
           {entry.plane && <li><DoneCard plane={plane} /></li>}
         </ol>
       )}
+      {plane && (plane.spec.author || plane.spec.sources?.length) ? (
+        <footer className="mt-8 max-w-[60ch] text-[15px] text-muted">
+          {plane.spec.author && <p>Designed by {plane.spec.author}.</p>}
+          {plane.spec.sources?.length ? (
+            <p className="mt-1">
+              Folds checked against{' '}
+              {plane.spec.sources.map((s, i) => (
+                <span key={s.title}>
+                  {i > 0 && (i === plane.spec.sources!.length - 1 ? ' and ' : ', ')}
+                  {s.url ? <a className="underline underline-offset-2" href={s.url} target="_blank" rel="noreferrer">{s.title}</a> : s.title}
+                </span>
+              ))}
+              .
+            </p>
+          ) : null}
+        </footer>
+      ) : null}
     </main>
   );
 }

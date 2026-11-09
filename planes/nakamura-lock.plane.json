@@ -5,6 +5,28 @@
   "summary": "A blunt-nosed glider with a small fold that locks the nose together. Slow, steady and long.",
   "difficulty": 2,
   "paper": "A4",
+  "author": "Eiji Nakamura",
+  "sources": [
+    {
+      "title": "Fold 'N Fly: Lock-Bottom Plane",
+      "url": "https://cdn.foldnfly.com/29.html",
+      "note": "Folding order and wing position (about 1 in from the belly)"
+    },
+    {
+      "title": "CSIRO Double Helix: Nakamura lock plane",
+      "url": "https://blog.doublehelix.csiro.au/nakamura-lock-plane",
+      "note": "Photographed folds, wing position (about 2 cm), designer"
+    },
+    {
+      "title": "Chikicha: Nakamura Lock steps",
+      "url": "https://www.chikicha.com/buzz-buzz/how-to-make-the-best-paper-airplane--the-long-distance-flyer--nakamura-lock",
+      "note": "The lock fold"
+    }
+  ],
+  "assumptions": [
+    "The tip of the point lands 2.5 cm above the bottom edge: the instructions say about an inch, read on A4.",
+    "The wings fold 2.5 cm from the belly: Fold 'N Fly says about an inch, CSIRO about 2 cm."
+  ],
   "steps": [
     {
       "title": "Crease the middle",

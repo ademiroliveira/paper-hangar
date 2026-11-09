@@ -62,6 +62,13 @@ export interface StepSpec {
   pose?: PoseSpec;
 }
 
+export interface SourceSpec {
+  title: string;
+  url?: string;
+  /** What was taken from it, e.g. "wing position". */
+  note?: string;
+}
+
 export interface PlaneSpec {
   $schema?: string;
   id: string;
@@ -69,7 +76,12 @@ export interface PlaneSpec {
   summary?: string;
   difficulty?: 1 | 2 | 3;
   paper: PaperSpec;
+  /** Who designed the plane, when known. */
   author?: string;
+  /** Where the folding method came from: pages, books, videos or your own notes. */
+  sources?: SourceSpec[];
+  /** Guesses made while writing the recipe, like reading "about an inch" as 2.5 cm on A4. Reviewers check these. */
+  assumptions?: string[];
   steps: StepSpec[];
   done?: { title: string; text: string };
 }

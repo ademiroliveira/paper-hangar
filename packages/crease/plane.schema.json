@@ -36,7 +36,41 @@
       "description": "1 easy, 2 medium, 3 tricky."
     },
     "author": {
-      "type": "string"
+      "type": "string",
+      "description": "Who designed the plane, when known."
+    },
+    "sources": {
+      "type": "array",
+      "description": "Where the folding method came from: pages, books, videos or your own notes.",
+      "items": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https?://"
+          },
+          "note": {
+            "type": "string",
+            "description": "What was taken from it, e.g. \"wing position\"."
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "description": "Guesses made while writing the recipe, like reading \"about an inch\" as 2.5 cm on A4. Reviewers check these.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "paper": {
       "description": "Sheet size. Custom sizes are in centimetres, portrait.",
