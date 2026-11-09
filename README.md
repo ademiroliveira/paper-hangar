@@ -130,5 +130,6 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 - Mountain folds, inside-reverse folds (tail fins), squash folds and tucks
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
+- Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools
 - iPhone and iPad apps: Expo + `@react-three/native` + HeroUI Native, reusing `packages/crease`
