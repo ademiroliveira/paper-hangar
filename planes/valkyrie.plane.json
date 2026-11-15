@@ -19,7 +19,7 @@
     "The recipe starts from US Letter with 2.5 cm (1 in) cut off the top: 21.6 × 25.4 cm.",
     "Step 3: \"about 1¼ in from the top\" is read as the crease sitting 3.2 cm below the tip.",
     "Step 5: the fold line is 2.5 cm (1 in) below the top edge of the outward-folded flaps, as the diagram marks it.",
-    "Steps 6–7: the book calls this a swivel fold. Its result, a straight slant from the top edge down the side, is folded here as an inside reverse fold of the pocket corner along the first corner crease.",
+    "Steps 6–7: folded as the book's swivel fold. The band folds over the V's edge, its end turns back down over the V's corner, and the layer under it folds its corner in along the first corner crease. Book diagrams 8d and 9 show these details: the vertical edge, the strip's bottom at about 7 in, and a white tip under the strip.",
     "Step 9: \"the outer edges\" are read as the sheet's straight side edges, folded onto the diagonal creases. This matches the steep sides in the book's next diagram.",
     "Steps 10–11: the app folds each side along its diagonal crease but doesn't show the small flap being tucked under the middle section. The photos don't make clear which flap it is. The step text keeps the book's instruction.",
     "Steps 14 and 16: the wings fold on a line from the nose tip to 2.5 cm (1 in) from the bottom fold at the back. The book marks 1 in at the back; the pointed nose and slanted back edge in its diagram 19 fit a line from the tip.",
@@ -96,23 +96,31 @@
       }
     },
     {
-      "title": "Reverse fold the right corner",
-      "text": "At the top right, the flap's corner forms a little pocket. Open it slightly and push the corner down inside, between its two layers, so the side runs in one straight slant from the top edge.",
+      "title": "Swivel the right corner",
+      "text": "Lift the band to the right of the V and fold it over the V's right edge. Its corner won't lie flat: let it open into a small tent, then press the tent down so the side runs in one straight slant from the top edge. The band ends up folded back over the V's corner.",
       "fold": {
-        "id": "lock-right",
-        "bring": "at:1,0.9",
-        "to": "at:0.764706,0.7",
-        "reverse": "inside"
+        "id": "swivel-right",
+        "line": [
+          "mid:edge:top",
+          "at:0.764706,0.775"
+        ],
+        "move": "at:1,0.9",
+        "flap": "at:0.9706,0.9348",
+        "swivel": true
       }
     },
     {
-      "title": "Reverse fold the left corner",
-      "text": "Do the same on the left: open the pocket and push the corner in between its layers.",
+      "title": "Swivel the left corner",
+      "text": "Do the same on the left: fold the band over the V's left edge and press its corner flat.",
       "fold": {
-        "id": "lock-left",
-        "bring": "at:0,0.9",
-        "to": "at:0.235294,0.7",
-        "reverse": "inside"
+        "id": "swivel-left",
+        "line": [
+          "mid:edge:top",
+          "at:0.235294,0.775"
+        ],
+        "move": "at:0,0.9",
+        "flap": "at:0.0294,0.9348",
+        "swivel": true
       }
     },
     {

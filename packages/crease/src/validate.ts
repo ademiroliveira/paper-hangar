@@ -49,6 +49,11 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
       const line = f.line !== undefined && f.move !== undefined;
       if (!bringTo && !alongMove && !parallel && !line) say(`${label}use "bring" + "to", "along" + "move", "parallel" + "distance" + "move", or "line" + "move".`);
       if (f.reverse !== undefined && f.reverse !== 'inside') say(`${label}"reverse" can only be "inside" for now.`);
+      if (f.swivel !== undefined) {
+        if (f.swivel !== true) say(`${label}"swivel" is either true or left out.`);
+        else if (!f.flap) say(`${label}a swivel needs "flap": a point on the layer that folds over.`);
+        if (folds.length > 1) say('A swivel goes in a step of its own: use "fold", not "folds".');
+      }
       if (f.id) {
         if (ids.has(f.id)) say(`${label}the id "${f.id}" is already used by an earlier fold.`);
         ids.add(f.id);

@@ -203,6 +203,10 @@
             "inside"
           ],
           "description": "inside: an inside reverse fold. The moving paper is a pocket; its point turns in between the pocket's two sides."
+        },
+        "swivel": {
+          "type": "boolean",
+          "description": "A swivel fold: the flap folds over this line, but it is joined to the layer under it along a fold, so its corner swivels back down around the point where the two folds meet, and the layer under it folds its corner in. Needs flap."
         }
       },
       "oneOf": [

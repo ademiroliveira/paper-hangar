@@ -44,6 +44,12 @@ export interface FoldSpec {
    * a fold); its point turns inside out and ends up between the pocket's two sides.
    */
   reverse?: 'inside';
+  /**
+   * A swivel fold: the `flap` folds over this fold's line, but it is joined to the layer under it along
+   * a fold (a pocket), so its corner swivels back down around the point where the two lines meet and the
+   * layer under it folds its corner in. Found automatically: the line where the flap is joined to that layer.
+   */
+  swivel?: boolean;
 }
 
 /** Cut through every layer along a straight line, from one point to the other. */
