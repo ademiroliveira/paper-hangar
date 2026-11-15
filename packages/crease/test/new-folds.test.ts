@@ -57,6 +57,66 @@ describe('inside reverse fold', () => {
   });
 });
 
+describe('swivel fold', () => {
+  // Fold the top 5 cm down: a band joined to the sheet along y = 24.7 (a pocket). Then swivel its right
+  // part over a 45° line through (15, 24.7): the band folds over, its end swivels down on top, and the
+  // sheet's corner folds in along x + y = 39.7.
+  const band: StepSpec = { title: 'Top down', fold: { id: 'top', parallel: 'edge:bottom', distance: 24.7, move: 'mid:edge:top' } };
+  const swivel: StepSpec = {
+    title: 'Swivel',
+    fold: { id: 'sw', line: ['at:0.714286,0.831650', 'at:0.476190,0.663300'], move: 'at:0.952381,0.707071', flap: 'at:0.857143,0.922559', swivel: true },
+  };
+  const side = (f: { world(): Vector3[] }) => {
+    const w = f.world();
+    let a = 0;
+    for (let i = 0; i < w.length; i++) { const p = w[i], q = w[(i + 1) % w.length]; a += p.x * -q.z - q.x * -p.z; }
+    return Math.sign(a);
+  };
+  const inside = (f: { world(): Vector3[] }, x: number, y: number) => {
+    const w = f.world();
+    let s = 0;
+    for (let i = 0; i < w.length; i++) {
+      const a = w[i], b = w[(i + 1) % w.length];
+      const c = (b.x - a.x) * (-y - a.z) - (b.z - a.z) * (x - a.x);
+      if (Math.abs(c) < 1e-9) continue;
+      if (s && Math.sign(c) !== s) return false;
+      s = Math.sign(c);
+    }
+    return true;
+  };
+
+  it('folds cleanly and passes every physical check', () => {
+    const plane = compilePlane(recipe([band, swivel]));
+    expect(auditPlane(plane)).toEqual([]);
+  });
+
+  it('leaves a straight slant where the corner was', () => {
+    const end = compilePlane(recipe([band, swivel])).steps[1].end;
+    for (const f of end) for (const v of f.world()) if (-v.z > 18.7 + 1e-6) expect(v.x - v.z).toBeLessThanOrEqual(39.7 + 1e-3);
+  });
+
+  it('turns the band\'s end down on top of the part folded over the line', () => {
+    const end = compilePlane(recipe([band, swivel])).steps[1].end;
+    // At (11, 23): the end of the band on top, back side up; under it the folded-over part, front side up.
+    const stack = end.filter(f => inside(f, 11, 23)).sort((a, b) => b.maxY() - a.maxY());
+    expect(stack[0].tags.has('moved:sw')).toBe(true);
+    expect(stack[1].tags.has('moved:sw')).toBe(true);
+    expect(side(stack[0])).toBe(-1);
+    expect(side(stack[1])).toBe(1);
+    // The sheet's corner now lies folded in at (19, 20), back side up.
+    const corner = end.filter(f => inside(f, 19, 20)).sort((a, b) => b.maxY() - a.maxY())[0];
+    expect(corner.tags.has('moved:sw')).toBe(true);
+    expect(side(corner)).toBe(-1);
+  });
+
+  it('refuses a flap that isn\'t joined to anything under it', () => {
+    const { error } = compilePlaneSoFar(recipe([
+      { title: 'Swivel', fold: { line: ['mid:edge:top', 'at:0,0.5'], move: 'corner:top-left', flap: 'corner:top-left', swivel: true } },
+    ]));
+    expect(error?.detail).toMatch(/needs a pocket/);
+  });
+});
+
 describe('flap', () => {
   const corners: StepSpec = {
     title: 'Corners in',

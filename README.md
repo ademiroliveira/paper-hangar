@@ -129,7 +129,8 @@ Options on a fold:
 - `"layers": "top"` folds only the uppermost flap (for example, one wing). The default, `"all"`, folds every layer on the moving side.
 - `"flap": "<point>"` folds only the flap that holds that point of the paper, plus anything lying on it. Use it when two flaps are equally high and `"layers": "top"` can't tell which one you mean ("fold the left flap's edge out").
 - `"unfold": true` folds, presses a crease, and opens it flat again.
-- `"reverse": "inside"` makes an inside reverse fold. The paper on the moving side must be a pocket, with the same number of layers on each side, joined along a fold. Its point turns inside out and ends up between the pocket's two sides. The model lifts off the table while the point turns in. The Valkyrie uses one to square off its corners.
+- `"reverse": "inside"` makes an inside reverse fold. The paper on the moving side must be a pocket, with the same number of layers on each side, joined along a fold. Its point turns inside out and ends up between the pocket's two sides. The model lifts off the table while the point turns in.
+- `"swivel": true` (with `"flap"`) makes a swivel fold. The flap folds over the fold's line, but it is joined to the layer under it along a fold, like a band folded down over the sheet. Its end can't follow flat, so it swivels back down around the point where the two folds meet, and the layer under it folds its corner in. You give the fold line and the flap. The engine finds the pocket's fold, and works out the other two creases and where each part lands. The Valkyrie squares off its top corners this way. A swivel goes in a step of its own.
 
 Other steps:
 
@@ -156,7 +157,7 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 ## Roadmap
 
-- Mountain folds without a flip, outside-reverse folds, squash and swivel folds, and tucking a flap into a pocket
+- Mountain folds without a flip, outside-reverse folds, squash folds, and tucking a flap into a pocket
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
 - Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools

@@ -19,12 +19,12 @@ export const range = (a: number, b: number): Profile => t => smooth(Math.min(1, 
 
 /**
  * One rigid motion inside a step: rotate some faces about an axis, optionally translate.
- * `reverse` ops turn one layer of a pocket inside out;
+ * `reverse` ops turn one layer of a pocket inside out; `swivel` ops are the three moves of a swivel fold;
  * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut;
  * `settle` lets layers drop onto the paper right under them at the end of a step.
  */
 export interface Op {
-  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'lift' | 'cut' | 'settle';
+  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'swivel' | 'lift' | 'cut' | 'settle';
   id?: string;
   /** Ops that move one piece of paper together (the layers of a reverse fold). Seams between them may open mid-motion. */
   group?: string;
@@ -371,6 +371,149 @@ function reverseOps(line: Line, id: string, chosen: Face[], faces: Face[]): { op
   return { ops, layerOf };
 }
 
+/** +1 when a flat face shows its front side, -1 when it shows its back (by the turn of its outline on the table). */
+function faceSide(f: Face): number {
+  const w = f.world();
+  let a = 0;
+  for (let i = 0; i < w.length; i++) { const p = w[i], q = w[(i + 1) % w.length]; a += p.x * -q.z - q.x * -p.z; }
+  return Math.sign(a);
+}
+
+/** Group faces into layers: connected through the paper without folding back on themselves. */
+function layerComponents(faces: Face[], cuts: [Vec2, Vec2][] = []): Face[][] {
+  const seen = new Set<Face>(), out: Face[][] = [];
+  for (const f of faces) {
+    if (seen.has(f)) continue;
+    const comp: Face[] = [], stack = [f];
+    seen.add(f);
+    while (stack.length) {
+      const g = stack.pop()!;
+      comp.push(g);
+      for (const h of faces) if (!seen.has(h) && faceSide(h) === faceSide(g) && sharedSegments(g, h, cuts).length) { seen.add(h); stack.push(h); }
+    }
+    out.push(comp);
+  }
+  return out;
+}
+
+const lineXZ = (p: Vector3, dir: Vector3, q: Vector3) => {
+  const r = new Vector3(q.x - p.x, 0, q.z - p.z);
+  return Math.abs(r.x * dir.z - r.z * dir.x);
+};
+const reflectDir = (v: Vector3, axis: Vector3) => axis.clone().multiplyScalar(2 * v.dot(axis)).sub(v);
+const reflectPoint = (q: Vector3, p: Vector3, axis: Vector3) => {
+  const r = new Vector3(q.x - p.x, 0, q.z - p.z);
+  return new Vector3(p.x, q.y, p.z).add(reflectDir(r, axis));
+};
+
+/**
+ * A swivel fold. The flap folds over line A (the fold's line). Where it is joined to the layer under
+ * it along a second line H (the pocket's fold), it can't follow, so around their meeting point P:
+ *   - R, the flap's part between A and B = A-mirror of H, just folds over A;
+ *   - Q, the flap's part past B, folds over A and back down over H: it turns about P and lands on R;
+ *   - the layer under it folds its part past D = H-mirror of A in along D.
+ * All three are one move of the paper, so they share a group: their seams may part mid-motion but must
+ * meet again where they land.
+ */
+function swivelOps(line: Line, id: string, flap: Face[], faces: Face[], ctx: RefContext): { faces: Face[]; ops: Op[]; assign: Map<Face, number[]> } {
+  const P0 = xz(line.a), aDir = xz(line.b).sub(P0).normalize();
+  const flapSet = new Set(flap);
+  // H: where the flap is joined to a layer that folds back under it (not along A itself).
+  const pts: Vector3[] = [];
+  for (const c of flap) for (const o of faces) {
+    if (flapSet.has(o) || faceSide(o) === faceSide(c)) continue;
+    for (const seg of sharedSegments(c, o, ctx.cuts)) {
+      const ends = seg.map(p => xz(flatToLocal(p).applyMatrix4(c.M)));
+      if (ends.every(e => lineXZ(P0, aDir, e) < 1e-3)) continue;
+      pts.push(...ends);
+    }
+  }
+  if (!pts.length) throw new RefError('A swivel needs a pocket: the flap has to be joined to the layer under it along a fold. This flap is free, so fold it normally.');
+  let h0 = pts[0], h1 = pts[0];
+  for (const p of pts) for (const q of pts) if (p.distanceTo(q) > h0.distanceTo(h1)) { h0 = p; h1 = q; }
+  const hDir = h1.clone().sub(h0).normalize();
+  if (pts.some(p => lineXZ(h0, hDir, p) > 1e-3)) throw new RefError('The flap is joined to the layer under it along more than one line, so it can\'t swivel.');
+  const cross = aDir.x * hDir.z - aDir.z * hDir.x;
+  if (Math.abs(cross) < 1e-6) throw new RefError('The swivel\'s fold line runs parallel to the pocket\'s fold, so there is no point to swivel around.');
+  const t = ((h0.x - P0.x) * hDir.z - (h0.z - P0.z) * hDir.x) / cross;
+  const P = P0.clone().addScaledVector(aDir, t);
+  const mover = xz(line.mover);
+  const nA = new Vector3(-aDir.z, 0, aDir.x);
+  if (mover.clone().sub(P).dot(nA) < 0) nA.negate();
+  const hRay = hDir.clone();
+  if (hRay.dot(nA) < 0) hRay.negate();
+  if (hRay.dot(nA) < 1e-3) throw new RefError('The pocket\'s fold doesn\'t reach the side of the line that moves, so nothing can swivel.');
+  const bDir = reflectDir(hRay, aDir);
+  const dDir = reflectDir(aDir, hDir);
+  const side = (dir: Vector3) => { const n = new Vector3(-dir.z, 0, dir.x); return n.dot(hRay) < 0 ? n.negate() : n; };
+  const nB = side(bDir), nD = side(dDir);
+  const beyond = (f: Face, n: Vector3) => f.centroidWorld().sub(P).setY(0).dot(n) > 0;
+
+  // Split the flap at B: R stays on A's side of it, Q is the part that swivels.
+  let out = faces;
+  const R: Face[] = [], Q: Face[] = [];
+  for (const f of flap) {
+    const parts = splitFace(f, P, nB);
+    for (const p of parts) { p.splitFrom = undefined; (beyond(p, nB) ? Q : R).push(p); }
+    out = out.flatMap(x => (x === f ? parts : [x]));
+  }
+  if (!Q.length) throw new RefError('No part of the flap reaches past the swivel point, so there is nothing to swivel. Fold it normally.');
+  // The layer under the flap: its corner past D folds in. Find it from the faces joined to Q along H.
+  const Qset = new Set(Q);
+  const seeds = out.filter(o => !Qset.has(o) && !R.includes(o) && Q.some(q => faceSide(o) !== faceSide(q) && sharedSegments(q, o, ctx.cuts).some(seg => seg.every(p => lineXZ(P, hDir, xz(flatToLocal(p).applyMatrix4(q.M))) < 1e-3))));
+  if (!seeds.length) throw new RefError('The swivelling part isn\'t joined to the layer under it, so the pocket can\'t flatten.');
+  const layer = layerComponents(out.filter(o => !Qset.has(o) && !R.includes(o)), ctx.cuts).filter(c => c.some(x => seeds.includes(x))).flat();
+  const W3: Face[] = [];
+  for (const f of layer) {
+    const parts = splitFace(f, P, nD);
+    const moved = parts.filter(p => beyond(p, nD));
+    if (!moved.length) continue;
+    for (const p of parts) p.splitFrom = undefined;
+    W3.push(...moved);
+    out = out.flatMap(x => (x === f ? parts : [x]));
+  }
+  if (!W3.length) throw new RefError('The layer under the flap doesn\'t reach past the swivel\'s corner crease.');
+
+  // The three moves: R and Q over A; then Q back over H, landing on R; the layer's corner in along D.
+  const centre = (fs: Face[]) => { const c = new Vector3(); fs.forEach(f => c.add(f.centroidWorld())); return c.multiplyScalar(1 / fs.length); };
+  const opA = makeOp({ a: P, b: P.clone().add(aDir), mover }, { kind: 'swivel', id, angle: 180, prof: x => Math.min(1, x / 0.6) }).op;
+  const opH = makeOp({ a: P, b: P.clone().add(hDir), mover: reflectPoint(centre(Q), P, aDir) }, { kind: 'swivel', id, angle: 180, prof: range(0.5, 1) }).op;
+  const opD = makeOp({ a: P, b: P.clone().add(dDir), mover: centre(W3) }, { kind: 'swivel', id, angle: 180, prof: range(0.45, 1) }).op;
+  for (const op of [opA, opH, opD]) { op.group = id; op.arrow = false; }
+  opA.arrow = true;
+
+  // Land each part just above the paper it ends up on, in order: R and Q, then Q on R, then the corner.
+  const moving = new Set([...R, ...Q, ...W3]);
+  const obstacles: Face[] = out.filter(f => !moving.has(f));
+  const settleOn = (op: Op, parts: Face[], before: (f: Face) => Matrix4) => {
+    const turn = opMatrix({ ...op, tr: null, hop: undefined }, 1);
+    const landed = parts.map(f => new Face(f.poly, before(f).clone().premultiply(turn)));
+    let lift = Math.max(0, ...landed.map(f => -Math.min(...f.world().map(v => v.y))));
+    for (const m of landed) for (const s of obstacles) {
+      if (overlapsFromAbove(m, s)) lift = Math.max(lift, s.maxY() + GAP - Math.min(...m.world().map(v => v.y)));
+    }
+    op.tr = new Vector3(0, lift, 0);
+    return new Matrix4().makeTranslation(0, lift, 0).multiply(turn);
+  };
+  const mA = settleOn(opA, [...R, ...Q], f => f.M);
+  obstacles.push(...R.map(f => new Face(f.poly, f.M.clone().premultiply(mA))));
+  const mH = settleOn(opH, Q, f => f.M.clone().premultiply(mA));
+  obstacles.push(...Q.map(f => new Face(f.poly, f.M.clone().premultiply(mA).premultiply(mH))));
+  settleOn(opD, W3, f => f.M);
+
+  // Show the corner crease too: where the layer under the flap folds in.
+  const dPts = W3.flatMap(f => f.world()).filter(v => lineXZ(P, dDir, v) < 1e-3);
+  if (dPts.length >= 2) {
+    const ts = dPts.map(v => v.clone().sub(P).setY(0).dot(dDir));
+    opD.crease = [P.clone().addScaledVector(dDir, Math.min(...ts)), P.clone().addScaledVector(dDir, Math.max(...ts))];
+  }
+  const assign = new Map<Face, number[]>();
+  R.forEach(f => assign.set(f, [0]));
+  Q.forEach(f => assign.set(f, [0, 1]));
+  W3.forEach(f => assign.set(f, [2]));
+  return { faces: out, ops: [opA, opH, opD], assign };
+}
+
 function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefContext): Step {
   const folds = spec.folds ?? [spec.fold!];
   const lines = folds.map(f => solveFold(f, start, ctx));
@@ -380,6 +523,8 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
   folds.forEach((f, k) => {
     const id = f.id ?? (folds.length > 1 ? `s${index + 1}-${k + 1}` : `s${index + 1}`);
     if (f.reverse && f.unfold) throw new RefError('A reverse fold can\'t be unfolded in the same step.');
+    if (f.swivel && (f.unfold || f.reverse || f.layers)) throw new RefError('A swivel can\'t also be unfolded, reversed or limited to "layers".');
+    if (f.swivel && folds.length > 1) throw new RefError('A swivel goes in a step of its own.');
     const { op, n, onSide } = makeOp(lines[k], {
       kind: 'fold', id, angle: f.unfold ? 175 : 180, prof: f.unfold ? thereAndBack : linear,
     });
@@ -387,7 +532,13 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     const split = faces.flatMap(fc => splitFace(fc, op.pivot, n));
     const moving = split.filter(onSide);
     let chosen = new Set(moving);
-    if (f.flap && moving.length) {
+    if (f.swivel && moving.length) {
+      if (!f.flap) throw new RefError('A swivel needs "flap": a point on the layer that folds over.');
+      const fp = flatPoint(f.flap, ctx);
+      const hit = layerComponents(moving, ctx.cuts).filter(c => c.some(x => flatContains(x, fp)));
+      if (!hit.length) throw new RefError(`"${f.flap}" isn't on the paper this fold moves. Point "flap" at the layer that folds over.`);
+      chosen = new Set(hit.flat());
+    } else if (f.flap && moving.length) {
       const fp = flatPoint(f.flap, ctx);
       const comps = components(moving, ctx.cuts);
       const hit = comps.filter(c => c.some(x => flatContains(x, fp)));
@@ -423,7 +574,12 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     }
 
     let myOps: Op[] = [op];
-    if (f.reverse === 'inside') {
+    if (f.swivel) {
+      const r = swivelOps(lines[k], id, faces.filter(fc => chosen.has(fc)), faces, ctx);
+      faces = r.faces;
+      myOps = r.ops;
+      for (const [fc, js] of r.assign) for (const j of js) fc.ops.add(ops.length + j);
+    } else if (f.reverse === 'inside') {
       const r = reverseOps(lines[k], id, faces.filter(fc => chosen.has(fc)), faces);
       myOps = r.ops;
       for (const [fc, j] of r.layerOf) fc.ops.add(ops.length + j);
@@ -451,7 +607,7 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     ctx.creases.set(id, segs);
     if (segs.length) {
       const c: [Vector3, Vector3] = [op.pivot.clone().addScaledVector(op.axis, tMin), op.pivot.clone().addScaledVector(op.axis, tMax)];
-      for (const o of myOps) o.crease = o.arrow ? c : null;
+      for (const o of myOps) if (o.arrow) o.crease = c;
       if (!myOps.some(o => o.crease)) myOps[0].crease = c;
     }
     ops.push(...myOps);
