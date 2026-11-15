@@ -306,6 +306,11 @@
               "type": "string",
               "pattern": "^[a-z0-9-]+$",
               "description": "With exactly two slits: names the tab between them. It hinges on the line joining the slits' ends (crease:<tab>), and the flight pose can bend it with tabs."
+            },
+            "remove": {
+              "type": "string",
+              "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+              "description": "Cut a piece off: a point on the piece to throw away. The slits must cut it free. When what's left is a rectangle, corners, edges and at: fractions refer to it from then on."
             }
           }
         },

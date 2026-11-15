@@ -230,6 +230,36 @@ describe('cut tabs', () => {
   });
 });
 
+describe('cutting a piece off', () => {
+  // Cut the top 2.97 cm off an A4 sheet, then fold the new top-left corner down.
+  const trim: StepSpec = { title: 'Trim', cut: { slits: [['at:0,0.9', 'at:1,0.9']], remove: 'at:0.5,0.95' } };
+
+  it('removes the piece, and later steps refer to what is left', () => {
+    const plane = compilePlane(recipe([
+      trim,
+      { title: 'Corner', fold: { id: 'corner', bring: 'corner:top-left', to: 'at:0.5,1', through: 'at:0,0.5' } },
+    ]));
+    expect(auditPlane(plane)).toEqual([]);
+    expect(plane.trims).toEqual([{ step: 0, area: expect.closeTo(21 * 26.73, 6), sheet: { x: 0, y: 0, w: 21, h: expect.closeTo(26.73, 6) } }]);
+    expect(plane.steps[0].end.reduce((a, f) => a + f.area(), 0)).toBeCloseTo(21 * 26.73, 6);
+    // corner:top-left is now (0, 26.73), the corner of the trimmed sheet, not of the A4 sheet.
+    const moved = plane.steps[1].end.filter(f => f.tags.has('moved:corner'));
+    expect(moved.some(f => f.poly.some(([x, y]) => Math.abs(x) < 1e-6 && Math.abs(y - 26.73) < 1e-6))).toBe(true);
+  });
+
+  it('slides the piece away while the step plays', () => {
+    const st = compilePlane(recipe([trim])).steps[0];
+    const off = st.ops.find(o => o.kind === 'cut' && o.moving.some(Boolean));
+    expect(off).toBeDefined();
+    expect(st.faces.filter((f, i) => off!.moving[i]).every(f => f.tags.has('removed'))).toBe(true);
+  });
+
+  it('refuses a piece the slits do not cut free', () => {
+    const { error } = compilePlaneSoFar(recipe([{ title: 'Trim', cut: { slits: [['at:0,0.9', 'at:0.6,0.9']], remove: 'at:0.5,0.95' } }]));
+    expect(error?.detail).toMatch(/don't cut the piece/);
+  });
+});
+
 describe('fins in the flight pose', () => {
   it('stand upright on the Valkyrie wings', () => {
     const plane = compilePlane(valkyrie as PlaneSpec);

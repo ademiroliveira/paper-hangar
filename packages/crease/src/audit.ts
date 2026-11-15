@@ -30,7 +30,10 @@ export function auditStep(plane: CompiledPlane, step: Step): AuditIssue[] {
 
   // 1. The sheet stays whole: faces tile the sheet exactly once.
   const area = faces.reduce((s, f) => s + f.area(), 0);
-  if (Math.abs(area - plane.width * plane.height) > 1e-3) say('sheet', 'The sheet lost or gained paper while splitting along a crease.');
+  // Less paper once a piece has been cut off in an earlier step.
+  const trimmed = (plane.trims ?? []).filter(t => t.step < step.index).at(-1);
+  const expected = trimmed ? trimmed.area : plane.width * plane.height;
+  if (Math.abs(area - expected) > 1e-3) say('sheet', 'The sheet lost or gained paper while splitting along a crease.');
   if (faces.some(f => f.area() < 1e-6)) say('sheet', 'A fold made a sliver of zero size; two creases are probably almost on top of each other.');
 
   // 2. No tearing: where moving paper meets paper that stays (or moves differently), that seam must be the hinge.

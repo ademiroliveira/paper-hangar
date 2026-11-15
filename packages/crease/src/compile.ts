@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { EPS, Face, components, flatContains, flatToLocal, overlapsFromAbove, sharedSegments, splitFace } from './geometry';
-import { RefError, flatPoint, resolve, type RefContext, type Resolved } from './refs';
+import { RefError, flatPoint, resolve, type Rect, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
 import { auditStep, type AuditIssue } from './audit';
@@ -71,6 +71,11 @@ export interface CompiledPlane {
   flyHeight: number;
   /** Flat segments where the paper has been cut. */
   cuts: [Vec2, Vec2][];
+  /**
+   * Pieces cut off and thrown away: after `step`, `area` cm² of paper is left, and corners, edges and
+   * at: fractions refer to `sheet` (when what's left is a rectangle).
+   */
+  trims: { step: number; area: number; sheet: Rect }[];
   steps: Step[];
   done: { title: string; text: string };
 }
@@ -689,7 +694,38 @@ function compileCut(spec: StepSpec, index: number, start: Face[], ctx: RefContex
   const tab = spec.cut!.tab;
   if (tab) faces = markTab(tab, spec.cut!.slits, faces, ctx);
   ops.forEach(op => { op.moving = faces.map(() => false); });
+  if (spec.cut!.remove) ops.push(removePiece(spec.cut!.remove, faces, ctx));
   return finish(index, spec, 'table', faces, ops);
+}
+
+/**
+ * Cut a piece off: the paper the slits have cut free, holding `ref`. It slides away during the step,
+ * is tagged `removed`, and is gone from the next step on. If what's left is a rectangle on the flat
+ * sheet, corners, edges and at: fractions refer to that rectangle from then on.
+ */
+function removePiece(ref: string, faces: Face[], ctx: RefContext): Op {
+  const fp = flatPoint(ref, ctx);
+  const pieces = components(faces, ctx.cuts);
+  const piece = pieces.find(c => c.some(f => flatContains(f, fp)));
+  if (!piece) throw new RefError(`"${ref}" isn't on the paper, so there's no piece there to cut off.`);
+  if (piece.length === faces.length) throw new RefError(`The slits don't cut the piece at "${ref}" free from the rest of the paper.`);
+  const kept = faces.filter(f => !piece.includes(f));
+  for (const f of piece) f.tags.add('removed');
+  // What's left, on the flat sheet: a rectangle if it fills its own bounding box.
+  const pts = kept.flatMap(f => f.poly);
+  const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  const y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const area = kept.reduce((a, f) => a + f.area(), 0);
+  if (Math.abs(area - (x1 - x0) * (y1 - y0)) < 1e-3) ctx.sheet = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  ctx.trims ??= [];
+  ctx.trims.push({ area, sheet: ctx.sheet ?? { x: 0, y: 0, w: ctx.W, h: ctx.H } });
+  // Slide it away from what's left, a little off the table.
+  const centre = (fs: Face[]) => { const c = new Vector3(); fs.forEach(f => c.add(f.centroidWorld())); return c.multiplyScalar(1 / fs.length); };
+  const away = centre(piece).sub(centre(kept)).setY(0).normalize().multiplyScalar(6);
+  return {
+    kind: 'cut', pivot: new Vector3(), axis: UP.clone(), angle: 0, tr: new Vector3(away.x, 0.3, away.z), lift: UP,
+    prof: range(0.3, 1), moving: faces.map(f => piece.includes(f)), crease: null, arrow: false, arrowEnd: 1,
+  };
 }
 
 /**
@@ -882,7 +918,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
   const stopAt = first ? (first.step ?? 0) : spec.steps.length;
   const { W, H } = first?.step == null && first ? { W: 21, H: 29.7 } : paperSize(spec.paper);
   const plane: CompiledPlane = {
-    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps, cuts: [],
+    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps, cuts: [], trims: [],
     done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
   };
   const ctx: RefContext = { W, H, creases: new Map(), cuts: plane.cuts };
@@ -899,6 +935,12 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
       const issues = auditStep(plane, st);
       if (issues.length) throw new PlaneError(i, issues[0].message, issues);
       if (st.view === 'table') settle(st);
+      // A piece cut off this step is gone from the next one.
+      if (st.end.some(f => f.tags.has('removed'))) {
+        st.end = st.end.filter(f => !f.tags.has('removed'));
+        const t = ctx.trims!.at(-1)!;
+        plane.trims.push({ step: i, area: t.area, sheet: t.sheet });
+      }
       steps.push(st);
       const named = new Set([...(s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id), s.cut?.tab].filter(Boolean));
       for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });

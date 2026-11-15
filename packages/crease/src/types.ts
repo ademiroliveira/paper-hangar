@@ -61,6 +61,11 @@ export interface CutSpec {
    * joining the slits' ends, which becomes `crease:<tab>`, and the flight pose can bend it with `tabs`.
    */
   tab?: string;
+  /**
+   * Cut a piece off: a point on the piece to throw away. The slits must separate it from the rest.
+   * When what's left is a rectangle, corners, edges and at: fractions refer to it from then on.
+   */
+  remove?: string;
 }
 
 export interface TabBend {

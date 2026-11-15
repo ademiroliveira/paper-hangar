@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
-import {
+import { sheetBefore,
   compilePlaneSoFar, describeAfter, measureFinished, refsAt, validatePlane,
   type CompiledPlane, type FinishedMeasures, type PlaneSpec, type RefsReport, type StateReport,
 } from '@paper-hangar/crease';
@@ -102,7 +102,9 @@ export function refsReport(file: string, step?: number): RefsReport & { sheet: {
     throw new Error(`Step ${n} can't be reached: only ${plane.steps.length} step(s) fold. ${why}`.trim());
   }
   if (n < 1) throw new Error('Steps count from 1.');
-  return { ...refsAt(plane, n - 1), sheet: { width: plane.width, height: plane.height } };
+  // at: fractions refer to the sheet as it is now, smaller once a piece has been cut off.
+  const sheet = sheetBefore(plane, n - 1);
+  return { ...refsAt(plane, n - 1), sheet: { width: +sheet.w.toFixed(2), height: +sheet.h.toFixed(2) } };
 }
 
 /** The paper after step `step` (1-based). Defaults to the last step that folds. */

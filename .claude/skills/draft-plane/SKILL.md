@@ -43,6 +43,7 @@ Write the steps as a person would say them, then match each to a fold kind from 
 | "Push the corner in between the layers" (inside reverse fold) | the fold with `"reverse": "inside"` |
 | "Fold the band over, let the pocket open, press it flat" (swivel fold) | the fold with `"swivel": true` and `"flap"`, in a step of its own |
 | "Cut a slit" | a `cut` step with `slits` |
+| "Cut a strip off" ("cut the top inch off") | a `cut` step with `slits` across the sheet and `remove`: a point on the strip |
 | "Cut two slits and bend the tab up" (elevators) | a `cut` step with two `slits` and a `tab` name, then the pose's `tabs` |
 | "Fold up a wingtip fin" | the fold, then list its id in the pose's `fins` |
 | "Open the wings" | `pose` |

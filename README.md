@@ -135,7 +135,7 @@ Options on a fold:
 Other steps:
 
 - `"flip": true` turns the model over left-to-right. `{ "axis": "short" }` turns it top-to-bottom.
-- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. With exactly two slits, add `"tab": "elevator"` to name the tab between them. The tab hinges on the line joining the slits' ends, which becomes `crease:<tab>`.
+- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. Add `"remove": "<point>"` to cut a piece off: the paper the slits cut free, holding that point, slides away and is gone from the next step on. When what's left is a rectangle, corners, edges and `at:` fractions refer to it from then on. The Valkyrie trims the top inch off US Letter this way. With exactly two slits, add `"tab": "elevator"` to name the tab between them. The tab hinges on the line joining the slits' ends, which becomes `crease:<tab>`.
 - `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane. Add `"fins": ["fin-1", "fin-2"]` (fold ids) to stand wingtip fins upright, or at `"finAngle"` degrees. Add `"tabs": [{ "id": "elevator", "angle": 20 }]` to bend cut tabs. A positive angle bends them up, toward the top of the plane in flight, on every wing.
 - A mountain fold (away from you) is written as `flip`, then the fold, the way the Nakamura lock folds in half with its folds outside.
 

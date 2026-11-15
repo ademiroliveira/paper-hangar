@@ -26,6 +26,7 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
         if (!Array.isArray(sl) || sl.length !== 2) { say('Each slit is two points: ["<from>", "<to>"].'); continue; }
         for (const r of sl) if (!isRef(r)) say(`"${r}" in a slit isn't a reference I know. Try corner:top-left, mid:edge:top or at:0.5,1.`);
       }
+      if (s.cut.remove !== undefined && !isRef(s.cut.remove)) say(`"cut.remove" must be a point on the piece to cut off, like at:0.5,0.95.`);
       if (s.cut.tab !== undefined) {
         if (!/^[a-z0-9-]+$/.test(s.cut.tab)) say('"cut.tab" must use lowercase letters, numbers and dashes, like "elevator".');
         else if (ids.has(s.cut.tab)) say(`"cut.tab" "${s.cut.tab}" is already used by an earlier fold or tab.`);

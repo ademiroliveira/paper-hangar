@@ -27,7 +27,9 @@ describe.each(files)('%s', file => {
     const plane = compilePlane(spec);
     for (const st of plane.steps) {
       const area = st.faces.reduce((s, f) => s + f.area(), 0);
-      expect(area).toBeCloseTo(plane.width * plane.height, 6);
+      // Whole, apart from any piece cut off in an earlier step.
+      const expected = plane.trims.filter(t => t.step < st.index).at(-1)?.area ?? plane.width * plane.height;
+      expect(area).toBeCloseTo(expected, 6);
     }
   });
 });
