@@ -22,9 +22,9 @@
     "Steps 6–7: the book calls this a swivel fold. Its result, a straight slant from the top edge down the side, is folded here as an inside reverse fold of the pocket corner along the first corner crease.",
     "Step 9: \"the outer edges\" are read as the sheet's straight side edges, folded onto the diagonal creases. This matches the steep sides in the book's next diagram.",
     "Steps 10–11: the app folds each side along its diagonal crease but doesn't show the small flap being tucked under the middle section. The photos don't make clear which flap it is. The step text keeps the book's instruction.",
-    "Steps 14 and 16: the wings fold parallel to the bottom fold, 2.5 cm (1 in) from it. The book marks 1 in at the back, and the small nose tab in its later diagrams fits a parallel fold.",
-    "Steps 17 and 19: the fins are about 1.5 cm wide. The book shows the line but no measurement.",
-    "Step 20: the book shows two slits in the back edge without measurements. The recipe uses two 1.5 cm slits, 2 cm apart, between the fin and the body. The app doesn't bend the tabs."
+    "Steps 14 and 16: the wings fold on a line from the nose tip to 2.5 cm (1 in) from the bottom fold at the back. The book marks 1 in at the back; the pointed nose and slanted back edge in its diagram 19 fit a line from the tip.",
+    "Steps 17 and 19: the fins are about 1.3 cm wide at the back, widening to about 2.5 cm at the front, with the crease parallel to the wing's fold. The book shows the line but no measurement.",
+    "Steps 20–21: two 1.5 cm slits, 1.8 cm apart, cut square to the back edge between the fin and the body, with the tab bent up 20° in flight as in the book's photo. The book gives no measurements."
   ],
   "steps": [
     {
@@ -186,11 +186,13 @@
     },
     {
       "title": "Fold the first wing",
-      "text": "Fold the top layer down along a line 2.5 cm (1 in) from the bottom fold, parallel to it.",
+      "text": "Fold the top layer over on a line from the nose tip to a point 2.5 cm (1 in) from the bottom fold at the back.",
       "fold": {
         "id": "wing-1",
-        "parallel": "crease:center",
-        "distance": 2.54,
+        "line": [
+          "at:0.5,0.775",
+          "at:0.617647,0"
+        ],
         "move": "at:0.85,0.1",
         "layers": "top"
       }
@@ -202,22 +204,24 @@
     },
     {
       "title": "Fold the second wing",
-      "text": "Same fold on this side: 2.5 cm (1 in) from the bottom fold, parallel to it, so the wings line up.",
+      "text": "Same fold on this side: from the nose tip to 2.5 cm (1 in) from the bottom fold at the back. Line it up with the first wing.",
       "fold": {
         "id": "wing-2",
-        "parallel": "crease:center",
-        "distance": 2.54,
-        "move": "at:0.1352,0.0787",
+        "line": [
+          "at:0.5,0.775",
+          "at:0.382353,0"
+        ],
+        "move": "at:0.15,0.1",
         "layers": "top"
       }
     },
     {
       "title": "Fold the first fin",
-      "text": "Fold the outer edge of the top wing up to make a fin about 1.5 cm wide. Keep the crease parallel to the wing's long folded edge.",
+      "text": "Fold the outer edge of the top wing up to make a fin, about 1.5 cm wide at the back and a little wider at the front. Keep the crease parallel to the wing's long folded edge.",
       "fold": {
         "id": "fin-1",
         "parallel": "crease:wing-2",
-        "distance": 6.755,
+        "distance": 6.8,
         "move": "corner:bottom-left",
         "layers": "top"
       }
@@ -233,30 +237,31 @@
       "fold": {
         "id": "fin-2",
         "parallel": "crease:wing-1",
-        "distance": 6.755,
+        "distance": 6.8,
         "move": "corner:bottom-right",
         "layers": "top"
       }
     },
     {
       "title": "Cut the elevators",
-      "text": "Hold the wings together, edges lined up. Cut two slits 1.5 cm (½ in) deep into the back edge, 2 cm apart, between the fins and the body. Both wings get the same cuts.",
+      "text": "Hold the wings together, edges lined up. Cut two slits 1.5 cm (½ in) straight into the back edge, about 1.8 cm apart, between the fins and the body. Both wings get the same cuts.",
       "cut": {
         "slits": [
           [
-            "at:0.844372,0",
-            "at:0.844372,0.059055"
+            "at:0.754979,0",
+            "at:0.754979,0.059055"
           ],
           [
-            "at:0.751737,0",
-            "at:0.751737,0.059055"
+            "at:0.838351,0",
+            "at:0.838351,0.059055"
           ]
-        ]
+        ],
+        "tab": "elevator"
       }
     },
     {
       "title": "Open the wings",
-      "text": "Lift both wings until they're level, angled slightly up, and stand the fins upright.",
+      "text": "Lift both wings until they're level, angled slightly up. Stand the fins upright and bend the elevator tabs up a little.",
       "pose": {
         "type": "flight",
         "spine": "crease:wing-2",
@@ -266,16 +271,22 @@
           "wing-2"
         ],
         "dihedral": 5,
+        "nose": "at:0.5,0.775",
         "fins": [
           "fin-1",
           "fin-2"
         ],
-        "nose": "at:0.5,0.775"
+        "tabs": [
+          {
+            "id": "elevator",
+            "angle": 20
+          }
+        ]
       }
     }
   ],
   "done": {
     "title": "Ready to glide",
-    "text": "Hold it under the wings and launch it gently and level. If the nose dives, bend the elevator tabs up a little; if it climbs and stalls, bend them down."
+    "text": "Hold it under the wings and launch it gently and level. If the nose dives, bend the elevator tabs up a little more; if it climbs and stalls, bend them down."
   }
 }

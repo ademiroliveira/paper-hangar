@@ -121,6 +121,7 @@ References follow the paper as it folds: `corner:top-left` means that corner whe
 | `bring` a point `to` a line `through` a point | the fold through that point that lands the first point on the line |
 | `along` a line, `move` a point | a fold along an existing line; the side with the point moves |
 | `parallel` to a line, `distance` in cm, `move` a point | a fold parallel to that line ("fold the wing down 2.5 cm from the belly") |
+| `line` through two points, `move` a point | a fold on the straight line through both points ("fold from the nose tip to 2.5 cm from the keel at the back") |
 
 Options on a fold:
 
@@ -133,8 +134,8 @@ Options on a fold:
 Other steps:
 
 - `"flip": true` turns the model over left-to-right. `{ "axis": "short" }` turns it top-to-bottom.
-- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. The Valkyrie cuts its elevators this way.
-- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane. Add `"fins": ["fin-1", "fin-2"]` (fold ids) to stand wingtip fins upright, or at `"finAngle"` degrees.
+- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. With exactly two slits, add `"tab": "elevator"` to name the tab between them. The tab hinges on the line joining the slits' ends, which becomes `crease:<tab>`.
+- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane. Add `"fins": ["fin-1", "fin-2"]` (fold ids) to stand wingtip fins upright, or at `"finAngle"` degrees. Add `"tabs": [{ "id": "elevator", "angle": 20 }]` to bend cut tabs. A positive angle bends them up, toward the top of the plane in flight, on every wing.
 - A mountain fold (away from you) is written as `flip`, then the fold, the way the Nakamura lock folds in half with its folds outside.
 
 Valley folds (toward you) and flips cover most beginner planes.
@@ -155,7 +156,7 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 ## Roadmap
 
-- Mountain folds without a flip, outside-reverse folds, squash folds, tucking a flap into a pocket, and bending cut tabs (elevators)
+- Mountain folds without a flip, outside-reverse folds, squash and swivel folds, and tucking a flap into a pocket
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
 - Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools

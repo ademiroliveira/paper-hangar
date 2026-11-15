@@ -150,6 +150,12 @@ function makeOp(line: Line, o: { kind: Op['kind']; id?: string; angle: number; p
 
 /** Turn a fold described in words into a crease line on the table. */
 function solveFold(f: FoldSpec, faces: Face[], ctx: RefContext): Line {
+  if (f.line) {
+    if (!f.move) throw new RefError('A fold on a "line" also needs "move": a point on the side that moves.');
+    const a = xz(pointOf(resolve(f.line[0], faces, ctx))), b = xz(pointOf(resolve(f.line[1], faces, ctx)));
+    if (a.distanceTo(b) < 1e-3) throw new RefError(`"${f.line[0]}" and "${f.line[1]}" are in the same place, so they don't make a line.`);
+    return { a, b, mover: pointOf(resolve(f.move, faces, ctx)) };
+  }
   if (f.along) {
     const L = resolve(f.along, faces, ctx);
     if (L.kind !== 'line') throw new RefError(`"along" needs a line (edge:… or crease:…), got "${f.along}".`);
@@ -398,7 +404,7 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
       chosen = new Set(best);
       growTrapped(chosen, comps);
     }
-    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along ?? f.parallel}".`);
+    if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along ?? f.parallel ?? f.line?.join(' to ')}".`);
     if (chosen.size === split.length && k === 0 && folds.length === 1) {
       throw new RefError('This fold moves all of the paper, so the fold line misses the sheet. Check the points, or use "flip" to turn the model over.');
     }
@@ -524,8 +530,46 @@ function compileCut(spec: StepSpec, index: number, start: Face[], ctx: RefContex
     };
     ops.push(mark);
   }
+  const tab = spec.cut!.tab;
+  if (tab) faces = markTab(tab, spec.cut!.slits, faces, ctx);
   ops.forEach(op => { op.moving = faces.map(() => false); });
   return finish(index, spec, 'table', faces, ops);
+}
+
+/**
+ * The tab between two slits: the paper between them, from the cut edge to the line joining the
+ * slits' ends. Tags it `tab:<id>` and records that line as `crease:<id>`, the hinge it bends on.
+ */
+function markTab(id: string, slits: [string, string][], faces: Face[], ctx: RefContext): Face[] {
+  if (slits.length !== 2) throw new RefError('A tab sits between exactly two slits.');
+  const [[a1, b1], [a2, b2]] = slits.map(([ra, rb]) => [xz(pointOf(resolve(ra, faces, ctx))), xz(pointOf(resolve(rb, faces, ctx)))]);
+  const along = b2.clone().sub(b1), width = along.length();
+  if (width < 1e-3) throw new RefError('The two slits end in the same place, so there is no tab between them.');
+  along.normalize();
+  const n = new Vector3(-along.z, 0, along.x);
+  // n points from the hinge toward the cut edge.
+  if (a1.clone().add(a2).multiplyScalar(0.5).sub(b1).dot(n) < 0) n.negate();
+  const between = (p: Vector3) => { const t = p.clone().sub(b1).dot(along); return t > 1e-4 && t < width - 1e-4; };
+  // Make sure the paper between the slits is split along the hinge.
+  const out = faces.flatMap(f => (between(f.centroidWorld()) ? splitFace(f, b1, n) : [f]));
+  for (const f of out) f.splitFrom = undefined;
+  const segs: [Vec2, Vec2][] = [];
+  let found = false;
+  for (const f of out) {
+    const c = f.centroidWorld();
+    if (!between(c) || c.clone().sub(b1).dot(n) <= 0) continue;
+    // A piece between the slits on the edge side of the hinge: part of the tab, if a slit bounds it.
+    f.tags.add(`tab:${id}`);
+    found = true;
+    const w = f.world();
+    f.poly.forEach((p, i) => {
+      const j = (i + 1) % f.poly.length;
+      if (Math.abs(w[i].clone().sub(b1).dot(n)) < 1e-3 && Math.abs(w[j].clone().sub(b1).dot(n)) < 1e-3) segs.push([p, f.poly[j]]);
+    });
+  }
+  if (!found || !segs.length) throw new RefError(`No paper lies between the two slits, so the tab "${id}" is empty.`);
+  ctx.creases.set(id, segs);
+  return out;
 }
 
 function compileFlip(spec: StepSpec, index: number, start: Face[]): Step {
@@ -603,6 +647,31 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
     op.moving = mine;
     ops.push(op);
   }
+  // Tabs (elevators) bend first too, each wing's tab on its own hinge. Which way is "up" depends on
+  // how that wing opens, so the direction is settled once every op is known (below).
+  const tabOps: Op[] = [];
+  for (const t of pose.tabs ?? []) {
+    const L = resolve(`crease:${t.id}`, faces, ctx);
+    if (L.kind !== 'line') throw new RefError(`"crease:${t.id}" isn't a line.`);
+    const groups = new Map<string, number[]>();
+    faces.forEach((f, i) => {
+      if (!f.tags.has(`tab:${t.id}`)) return;
+      const key = wingOf(f) ?? 'body';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(i);
+    });
+    if (!groups.size) throw new RefError(`No paper belongs to the tab "${t.id}".`);
+    for (const idx of groups.values()) {
+      const c = new Vector3();
+      idx.forEach(i => c.add(faces[i].centroidWorld()));
+      c.multiplyScalar(1 / idx.length);
+      const { op } = makeOp({ a: L.a, b: L.b, mover: c }, { kind: 'pose', angle: t.angle ?? 20, prof: range(0.6, 1), h: c.y, lift: UP });
+      const set = new Set(idx);
+      op.moving = faces.map((_, i) => set.has(i));
+      ops.push(op);
+      tabOps.push(op);
+    }
+  }
   for (const id of pose.wings) {
     const mine = faces.map(f => wingOf(f) === id);
     const ys = faces.filter((_, i) => mine[i]).flatMap(f => f.world().map(v => v.y));
@@ -627,6 +696,18 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
     angle: dir.angleTo(want), tr: new Vector3(W / 2, flyH, -H / 2).sub(center), lift: UP, prof: liftProf,
     moving: faces.map(() => true), crease: null, arrow: false, arrowEnd: 1,
   });
+  // Bend each tab toward the top of the plane in flight: try both ways and keep the higher one.
+  for (const op of tabOps) {
+    const i = op.moving.indexOf(true);
+    const yAt = () => {
+      const M = faces[i].M.clone();
+      ops.forEach(o => { if (o.moving[i]) M.premultiply(opMatrix(o, 1)); });
+      return faces[i].centroidWorld().applyMatrix4(faces[i].M.clone().invert()).applyMatrix4(M).y;
+    };
+    const up = yAt();
+    op.angle = -op.angle;
+    if (yAt() < up) op.angle = -op.angle;
+  }
   return finish(index, spec, 'flight', faces, ops);
 }
 
@@ -663,7 +744,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
       if (issues.length) throw new PlaneError(i, issues[0].message, issues);
       if (st.view === 'table') settle(st);
       steps.push(st);
-      const named = new Set((s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id).filter(Boolean));
+      const named = new Set([...(s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id), s.cut?.tab].filter(Boolean));
       for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });
       faces = st.end;
     } catch (e) {
