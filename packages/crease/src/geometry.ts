@@ -103,8 +103,33 @@ export function flatToWorld(p: Vec2, faces: Face[]): Vector3 {
   return flatToLocal(p).applyMatrix4(face!.M);
 }
 
-/** The stretches of edge two faces share in flat coordinates (where the paper connects them). */
-export function sharedSegments(a: Face, b: Face): [Vec2, Vec2][] {
+/** Remove the parts of a flat segment that lie along a cut. */
+function minusCuts(seg: [Vec2, Vec2], cuts: [Vec2, Vec2][]): [Vec2, Vec2][] {
+  const [p0, p1] = seg;
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy);
+  if (len < 1e-9) return [];
+  const ux = dx / len, uy = dy / len;
+  let keep: [number, number][] = [[0, len]];
+  for (const [q0, q1] of cuts) {
+    const c0 = ux * (q0[1] - p0[1]) - uy * (q0[0] - p0[0]);
+    const c1 = ux * (q1[1] - p0[1]) - uy * (q1[0] - p0[0]);
+    if (Math.abs(c0) > 1e-6 || Math.abs(c1) > 1e-6) continue;
+    const t0 = ux * (q0[0] - p0[0]) + uy * (q0[1] - p0[1]);
+    const t1 = ux * (q1[0] - p0[0]) + uy * (q1[1] - p0[1]);
+    const lo = Math.min(t0, t1), hi = Math.max(t0, t1);
+    keep = keep.flatMap(([a, b]): [number, number][] => {
+      if (hi <= a + 1e-9 || lo >= b - 1e-9) return [[a, b]];
+      const out: [number, number][] = [];
+      if (lo > a + 1e-6) out.push([a, lo]);
+      if (hi < b - 1e-6) out.push([hi, b]);
+      return out;
+    });
+  }
+  return keep.map(([a, b]) => [[p0[0] + ux * a, p0[1] + uy * a], [p0[0] + ux * b, p0[1] + uy * b]]);
+}
+
+/** The stretches of edge two faces share in flat coordinates (where the paper connects them). Cuts don't connect. */
+export function sharedSegments(a: Face, b: Face, cuts: [Vec2, Vec2][] = []): [Vec2, Vec2][] {
   const out: [Vec2, Vec2][] = [];
   for (let i = 0; i < a.poly.length; i++) {
     const p0 = a.poly[i], p1 = a.poly[(i + 1) % a.poly.length];
@@ -122,11 +147,12 @@ export function sharedSegments(a: Face, b: Face): [Vec2, Vec2][] {
       if (hi - lo > 1e-6) out.push([[p0[0] + ux * lo, p0[1] + uy * lo], [p0[0] + ux * hi, p0[1] + uy * hi]]);
     }
   }
-  return out;
+  return cuts.length ? out.flatMap(seg => minusCuts(seg, cuts)) : out;
 }
 
 /** Two faces share a stretch of edge in flat coordinates, i.e. the paper connects them. */
-export function adjacent(a: Face, b: Face): boolean {
+export function adjacent(a: Face, b: Face, cuts: [Vec2, Vec2][] = []): boolean {
+  if (cuts.length) return sharedSegments(a, b, cuts).length > 0;
   const ea = a.poly.map((p, i) => [p, a.poly[(i + 1) % a.poly.length]] as const);
   const eb = b.poly.map((p, i) => [p, b.poly[(i + 1) % b.poly.length]] as const);
   for (const [p0, p1] of ea) {
@@ -163,7 +189,7 @@ export function overlapsFromAbove(a: Face, b: Face, eps = 1e-4): boolean {
 }
 
 /** Group faces into flaps: sets connected through the paper. */
-export function components(faces: Face[]): Face[][] {
+export function components(faces: Face[], cuts: [Vec2, Vec2][] = []): Face[][] {
   const seen = new Set<Face>(), out: Face[][] = [];
   for (const f of faces) {
     if (seen.has(f)) continue;
@@ -172,7 +198,7 @@ export function components(faces: Face[]): Face[][] {
     while (stack.length) {
       const g = stack.pop()!;
       comp.push(g);
-      for (const h of faces) if (!seen.has(h) && adjacent(g, h)) { seen.add(h); stack.push(h); }
+      for (const h of faces) if (!seen.has(h) && adjacent(g, h, cuts)) { seen.add(h); stack.push(h); }
     }
     out.push(comp);
   }

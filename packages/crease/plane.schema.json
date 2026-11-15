@@ -182,6 +182,17 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "With parallel: how far from that line, in cm."
+        },
+        "flap": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "Fold only the flap that holds this point of the paper (and anything on top of it)."
+        },
+        "reverse": {
+          "enum": [
+            "inside"
+          ],
+          "description": "inside: an inside reverse fold. The moving paper is a pocket; its point turns in between the pocket's two sides."
         }
       },
       "oneOf": [
@@ -249,6 +260,30 @@
             }
           ]
         },
+        "cut": {
+          "type": "object",
+          "required": [
+            "slits"
+          ],
+          "additionalProperties": false,
+          "description": "Cut through every layer. The paper stays put; it just stops being joined along each slit.",
+          "properties": {
+            "slits": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "string",
+                  "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$"
+                }
+              },
+              "description": "Each slit runs from the first point to the second."
+            }
+          }
+        },
         "pose": {
           "type": "object",
           "required": [
@@ -291,6 +326,20 @@
               "type": "string",
               "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
               "description": "A point at the front of the plane. Needed when the wings hinge parallel to the keel."
+            },
+            "fins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Ids of the folds that made wingtip fins. They open to stand at finAngle to the wing."
+            },
+            "finAngle": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 180,
+              "default": 90,
+              "description": "How far the fins open from lying flat, in degrees."
             }
           }
         }
@@ -309,6 +358,11 @@
         {
           "required": [
             "flip"
+          ]
+        },
+        {
+          "required": [
+            "cut"
           ]
         },
         {

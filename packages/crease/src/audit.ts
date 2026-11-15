@@ -36,12 +36,27 @@ export function auditStep(plane: CompiledPlane, step: Step): AuditIssue[] {
   // 2. No tearing: where moving paper meets paper that stays (or moves differently), that seam must be the hinge.
   const pairs: [number, number, [number, number][][]][] = [];
   for (let i = 0; i < faces.length; i++) for (let j = i + 1; j < faces.length; j++) {
-    const segs = sharedSegments(faces[i], faces[j]);
+    const segs = sharedSegments(faces[i], faces[j], plane.cuts);
     if (segs.length) pairs.push([i, j, segs]);
   }
+  // The layers of a reverse fold turn opposite ways, so their shared fold opens while they move.
+  // It's fine as long as it closes up again where they land.
+  const groupOf = (i: number) => step.ops.find(o => o.group && o.moving[i])?.group;
+  const end = stepMatrices(step, 1);
   step.ops.forEach(op => {
     for (const [i, j, segs] of pairs) {
       if (op.moving[i] === op.moving[j]) continue;
+      if (op.group && groupOf(i) === op.group && groupOf(j) === op.group) {
+        const Mi = faceMatrix(step, i, end), Mj = faceMatrix(step, j, end);
+        for (const seg of segs) for (const p of seg) {
+          const a = flatToLocal(p as [number, number]).applyMatrix4(Mi), b = flatToLocal(p as [number, number]).applyMatrix4(Mj);
+          if (Math.hypot(a.x - b.x, a.z - b.z) > 1e-3) {
+            say('tear', `The paper would tear: the two sides of the pocket don't meet again after the reverse fold, near ${fmt(p as [number, number])}.`);
+            return;
+          }
+        }
+        continue;
+      }
       for (const seg of segs) for (const p of seg) {
         const w = flatToLocal(p as [number, number]).applyMatrix4(faces[i].M);
         if (distToAxisXZ(op, w) > 1e-3) {

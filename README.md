@@ -126,12 +126,15 @@ Options on a fold:
 
 - `"id"` names the crease, so later steps can use `crease:<id>`.
 - `"layers": "top"` folds only the uppermost flap (for example, one wing). The default, `"all"`, folds every layer on the moving side.
+- `"flap": "<point>"` folds only the flap that holds that point of the paper, plus anything lying on it. Use it when two flaps are equally high and `"layers": "top"` can't tell which one you mean ("fold the left flap's edge out").
 - `"unfold": true` folds, presses a crease, and opens it flat again.
+- `"reverse": "inside"` makes an inside reverse fold. The paper on the moving side must be a pocket, with the same number of layers on each side, joined along a fold. Its point turns inside out and ends up between the pocket's two sides. The model lifts off the table while the point turns in. The Valkyrie uses one to square off its corners.
 
 Other steps:
 
 - `"flip": true` turns the model over left-to-right. `{ "axis": "short" }` turns it top-to-bottom.
-- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane.
+- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. The Valkyrie cuts its elevators this way.
+- `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane. Add `"fins": ["fin-1", "fin-2"]` (fold ids) to stand wingtip fins upright, or at `"finAngle"` degrees.
 - A mountain fold (away from you) is written as `flip`, then the fold, the way the Nakamura lock folds in half with its folds outside.
 
 Valley folds (toward you) and flips cover most beginner planes.
@@ -152,7 +155,7 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 ## Roadmap
 
-- Mountain folds, inside-reverse folds (tail fins), squash folds and tucks
+- Mountain folds without a flip, outside-reverse folds, squash folds, tucking a flap into a pocket, and bending cut tabs (elevators)
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
 - Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools

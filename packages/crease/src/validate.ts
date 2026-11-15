@@ -17,17 +17,25 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
   spec.steps.forEach((s, i) => {
     const say = (message: string) => out.push({ step: i, message });
     if (!s.title) say('"title" is missing.');
-    const kinds = ['fold', 'folds', 'flip', 'pose'].filter(k => (s as unknown as Record<string, unknown>)[k] !== undefined);
-    if (kinds.length !== 1) { say('Each step needs exactly one of "fold", "folds", "flip" or "pose".'); return; }
+    const kinds = ['fold', 'folds', 'flip', 'cut', 'pose'].filter(k => (s as unknown as Record<string, unknown>)[k] !== undefined);
+    if (kinds.length !== 1) { say('Each step needs exactly one of "fold", "folds", "flip", "cut" or "pose".'); return; }
+    if (s.cut) {
+      if (!Array.isArray(s.cut.slits) || !s.cut.slits.length) say('"cut.slits" must list at least one slit: ["<from point>", "<to point>"].');
+      else for (const sl of s.cut.slits) {
+        if (!Array.isArray(sl) || sl.length !== 2) { say('Each slit is two points: ["<from>", "<to>"].'); continue; }
+        for (const r of sl) if (!isRef(r)) say(`"${r}" in a slit isn't a reference I know. Try corner:top-left, mid:edge:top or at:0.5,1.`);
+      }
+    }
     const folds: FoldSpec[] = s.folds ?? (s.fold ? [s.fold] : []);
     folds.forEach((f, k) => {
       const label = folds.length > 1 ? `Fold ${k + 1}: ` : '';
-      const refs = (['bring', 'to', 'through', 'along', 'move', 'parallel'] as const).filter(key => f[key] !== undefined);
+      const refs = (['bring', 'to', 'through', 'along', 'move', 'parallel', 'flap'] as const).filter(key => f[key] !== undefined);
       for (const key of refs) if (!isRef(f[key]!)) say(`${label}"${f[key]}" in "${key}" isn't a reference I know. Try corner:top-left, edge:left, crease:<id>, mid:edge:top or at:0.5,1.`);
       const bringTo = f.bring !== undefined && f.to !== undefined;
       const alongMove = f.along !== undefined && f.move !== undefined;
       const parallel = f.parallel !== undefined && f.move !== undefined && typeof f.distance === 'number';
       if (!bringTo && !alongMove && !parallel) say(`${label}use "bring" + "to", "along" + "move", or "parallel" + "distance" + "move".`);
+      if (f.reverse !== undefined && f.reverse !== 'inside') say(`${label}"reverse" can only be "inside" for now.`);
       if (f.id) {
         if (ids.has(f.id)) say(`${label}the id "${f.id}" is already used by an earlier fold.`);
         ids.add(f.id);
@@ -39,6 +47,7 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
       if (s.pose.nose !== undefined && !isRef(s.pose.nose)) say(`"pose.nose" must be a point reference, like at:0.5,1.`);
       if (!Array.isArray(s.pose.wings) || !s.pose.wings.length) say('"pose.wings" must list the ids of the wing folds.');
       else for (const w of s.pose.wings) if (!ids.has(w)) say(`"pose.wings" mentions "${w}", but no earlier fold has that id.`);
+      for (const fin of s.pose.fins ?? []) if (!ids.has(fin)) say(`"pose.fins" mentions "${fin}", but no earlier fold has that id.`);
     }
   });
   return out;
