@@ -131,11 +131,12 @@ Options on a fold:
 - `"unfold": true` folds, presses a crease, and opens it flat again.
 - `"reverse": "inside"` makes an inside reverse fold. The paper on the moving side must be a pocket, with the same number of layers on each side, joined along a fold. Its point turns inside out and ends up between the pocket's two sides. The model lifts off the table while the point turns in.
 - `"swivel": true` (with `"flap"`) makes a swivel fold. The flap folds over the fold's line, but it is joined to the layer under it along a fold, like a band folded down over the sheet. Its end can't follow flat, so it swivels back down around the point where the two folds meet, and the layer under it folds its corner in. You give the fold line and the flap. The engine finds the pocket's fold, and works out the other two creases and where each part lands. The Valkyrie squares off its top corners this way. A swivel goes in a step of its own.
+- `"tuck": { "flap": "<point>", "under": "<fold id>" }` slides a flap in under paper an earlier fold put on top, as a lock. The fold lands first. Then the part of the flap that landed on that paper drops beneath it, between it and the layer below. The flap must be joined to the rest along one line, the edge it slides in under, or the engine says it can't go in. The Valkyrie locks its sides this way.
 
 Other steps:
 
 - `"flip": true` turns the model over left-to-right. `{ "axis": "short" }` turns it top-to-bottom.
-- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. With exactly two slits, add `"tab": "elevator"` to name the tab between them. The tab hinges on the line joining the slits' ends, which becomes `crease:<tab>`.
+- `"cut": { "slits": [["<from>", "<to>"], …] }` cuts through every layer along each slit. The paper stays put; it's just no longer joined across the slit. Add `"remove": "<point>"` to cut a piece off: the paper the slits cut free, holding that point, slides away and is gone from the next step on. When what's left is a rectangle, corners, edges and `at:` fractions refer to it from then on. The Valkyrie trims the top inch off US Letter this way. With exactly two slits, add `"tab": "elevator"` to name the tab between them. The tab hinges on the line joining the slits' ends, which becomes `crease:<tab>`.
 - `"pose": { "type": "flight", "spine": "crease:wing-2", "keel": "crease:center", "wings": ["wing-1", "wing-2"], "dihedral": 6 }` stands the plane up, opens the wings and floats it. When the wings hinge parallel to the keel, add `"nose"`: a point at the front of the plane. Add `"fins": ["fin-1", "fin-2"]` (fold ids) to stand wingtip fins upright, or at `"finAngle"` degrees. Add `"tabs": [{ "id": "elevator", "angle": 20 }]` to bend cut tabs. A positive angle bends them up, toward the top of the plane in flight, on every wing.
 - A mountain fold (away from you) is written as `flip`, then the fold, the way the Nakamura lock folds in half with its folds outside.
 
@@ -157,7 +158,7 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 ## Roadmap
 
-- Mountain folds without a flip, outside-reverse folds, squash folds, and tucking a flap into a pocket
+- Mountain folds without a flip, outside-reverse folds, and squash folds
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
 - Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools

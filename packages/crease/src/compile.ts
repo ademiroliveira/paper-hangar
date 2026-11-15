@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { EPS, Face, components, flatContains, flatToLocal, overlapsFromAbove, sharedSegments, splitFace } from './geometry';
-import { RefError, flatPoint, resolve, type RefContext, type Resolved } from './refs';
+import { RefError, flatPoint, resolve, type Rect, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
 import { auditStep, type AuditIssue } from './audit';
@@ -20,11 +20,12 @@ export const range = (a: number, b: number): Profile => t => smooth(Math.min(1, 
 /**
  * One rigid motion inside a step: rotate some faces about an axis, optionally translate.
  * `reverse` ops turn one layer of a pocket inside out; `swivel` ops are the three moves of a swivel fold;
+ * `tuck` slides a flap down under paper an earlier fold put on top;
  * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut;
  * `settle` lets layers drop onto the paper right under them at the end of a step.
  */
 export interface Op {
-  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'swivel' | 'lift' | 'cut' | 'settle';
+  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'swivel' | 'tuck' | 'lift' | 'cut' | 'settle';
   id?: string;
   /** Ops that move one piece of paper together (the layers of a reverse fold). Seams between them may open mid-motion. */
   group?: string;
@@ -71,6 +72,11 @@ export interface CompiledPlane {
   flyHeight: number;
   /** Flat segments where the paper has been cut. */
   cuts: [Vec2, Vec2][];
+  /**
+   * Pieces cut off and thrown away: after `step`, `area` cm² of paper is left, and corners, edges and
+   * at: fractions refer to `sheet` (when what's left is a rectangle).
+   */
+  trims: { step: number; area: number; sheet: Rect }[];
   steps: Step[];
   done: { title: string; text: string };
 }
@@ -514,11 +520,103 @@ function swivelOps(line: Line, id: string, flap: Face[], faces: Face[], ctx: Ref
   return { faces: out, ops: [opA, opH, opD], assign };
 }
 
+/** Is a table point (x, z) inside a face's outline as it lies now? */
+function coversXZ(f: Face, x: number, z: number): boolean {
+  const w = f.world();
+  let sign = 0;
+  for (let i = 0; i < w.length; i++) {
+    const a = w[i], b = w[(i + 1) % w.length];
+    const c = (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x);
+    if (Math.abs(c) < 1e-6) continue;
+    const sg = Math.sign(c);
+    if (sign && sg !== sign) return false;
+    sign = sg;
+  }
+  return true;
+}
+
+interface TuckPlan { opIndex: number; tucked: Face[]; under: Face[]; axis: [Vector3, Vector3] }
+
+/**
+ * A tuck: as the fold lands, the flap that would lie on top of `under`'s paper slides beneath it.
+ * The moving paper is split where it crosses that paper's outline; the flap is the part inside the
+ * outline that is joined to the point given, without crossing the outline. It may be several layers.
+ * It must be joined to everything else along one line, the edge it slides in under.
+ */
+function planTuck(f: FoldSpec, opIndex: number, op: Op, faces: Face[], ctx: RefContext): { faces: Face[]; plan: TuckPlan } {
+  const t = f.tuck!;
+  const fp = flatPoint(t.flap, ctx);
+  if (!faces.some(x => x.ops.has(opIndex) && flatContains(x, fp))) throw new RefError(`The tuck's flap "${t.flap}" isn't on the paper this fold moves.`);
+  const under = faces.filter(x => x.ops.size === 0 && x.tags.has(`moved:${t.under}`));
+  if (!under.length) throw new RefError(`Nothing from the fold "${t.under}" stays put here, so there's nothing to tuck under.`);
+  const end = opMatrix(op, 1), back = end.clone().invert();
+  const inRegion = (x: number, z: number) => under.some(u => coversXZ(u, x, z));
+
+  let out = faces;
+  const inside: Face[] = [];
+  for (const piece of faces.filter(x => x.ops.has(opIndex))) {
+    const landed = new Face(piece.poly, piece.M.clone().premultiply(end));
+    const over = under.filter(u => overlapsFromAbove(landed, u));
+    if (!over.length) continue;
+    let parts = [piece];
+    for (const u of over) {
+      const w = u.world();
+      for (let i = 0; i < w.length; i++) {
+        // An edge of the paper above, carried back to where the moving paper starts.
+        const a = w[i].clone().applyMatrix4(back), b = w[(i + 1) % w.length].clone().applyMatrix4(back);
+        const d = new Vector3(b.x - a.x, 0, b.z - a.z);
+        if (d.lengthSq() < 1e-12) continue;
+        parts = parts.flatMap(p => splitFace(p, new Vector3(a.x, 0, a.z), new Vector3(-d.z, 0, d.x).normalize()));
+      }
+    }
+    parts = parts.filter(p => p.area() > 1e-9);
+    const ins = parts.filter(p => { const c = p.centroidWorld().applyMatrix4(end); return inRegion(c.x, c.z); });
+    if (!ins.length) continue;
+    for (const p of parts) p.splitFrom = undefined;
+    out = out.flatMap(x => (x === piece ? parts : [x]));
+    inside.push(...ins);
+  }
+  const first = inside.find(p => flatContains(p, fp));
+  if (!first) throw new RefError(`The flap at "${t.flap}" doesn't land on paper from "${t.under}", so there's nothing to tuck it under.`);
+  // The flap: pieces joined to the first one through seams that stay inside the outline once landed.
+  const interior = (a: Face, seg: [Vec2, Vec2]) => {
+    const p = flatToLocal([(seg[0][0] + seg[1][0]) / 2, (seg[0][1] + seg[1][1]) / 2]).applyMatrix4(a.M).applyMatrix4(end);
+    const q0 = flatToLocal(seg[0]).applyMatrix4(a.M).applyMatrix4(end), q1 = flatToLocal(seg[1]).applyMatrix4(a.M).applyMatrix4(end);
+    const n = new Vector3(-(q1.z - q0.z), 0, q1.x - q0.x).normalize().multiplyScalar(1e-3);
+    return inRegion(p.x + n.x, p.z + n.z) && inRegion(p.x - n.x, p.z - n.z);
+  };
+  const tucked = new Set([first]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const a of [...tucked]) for (const b of inside) {
+      if (tucked.has(b)) continue;
+      if (sharedSegments(a, b, ctx.cuts).some(seg => interior(a, seg))) { tucked.add(b); grew = true; }
+    }
+  }
+  // Everything else must hold on along one line: the edge the flap slides in under.
+  const pts: Vector3[] = [];
+  for (const a of tucked) for (const b of out) {
+    if (tucked.has(b)) continue;
+    for (const seg of sharedSegments(a, b, ctx.cuts)) for (const p of seg) pts.push(flatToLocal(p).applyMatrix4(a.M));
+  }
+  let p0 = pts[0] ?? first.centroidWorld(), p1 = p0;
+  for (const p of pts) for (const q of pts) if (p.distanceTo(q) > p0.distanceTo(p1)) { p0 = p; p1 = q; }
+  const dir = p1.clone().sub(p0).setY(0);
+  if (dir.lengthSq() > 1e-12) {
+    dir.normalize();
+    if (pts.some(p => lineXZ(p0, dir, p) > 1e-3)) {
+      throw new RefError('The flap is joined to the rest along more than one line, so it can\'t slide under. Tuck a smaller flap, or fold it first.');
+    }
+  }
+  return { faces: out, plan: { opIndex, tucked: [...tucked], under, axis: [p0, dir] } };
+}
+
 function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefContext): Step {
   const folds = spec.folds ?? [spec.fold!];
   const lines = folds.map(f => solveFold(f, start, ctx));
   let faces = start.map(f => new Face(f.poly, f.M, f.tags));
   const ops: Op[] = [];
+  const tucks: { f: FoldSpec; opIndex: number }[] = [];
 
   folds.forEach((f, k) => {
     const id = f.id ?? (folds.length > 1 ? `s${index + 1}-${k + 1}` : `s${index + 1}`);
@@ -585,6 +683,7 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
       for (const [fc, j] of r.layerOf) fc.ops.add(ops.length + j);
     } else {
       for (const fc of faces) if (chosen.has(fc)) fc.ops.add(ops.length);
+      if (f.tuck) tucks.push({ f, opIndex: ops.length });
     }
 
     // Record the new crease (the hinge edges of what moved) so later steps can refer to it.
@@ -613,8 +712,51 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     ops.push(...myOps);
   });
 
+  const plans: TuckPlan[] = [];
+  for (const { f, opIndex } of tucks) {
+    const r = planTuck(f, opIndex, ops[opIndex], faces, ctx);
+    faces = r.faces;
+    plans.push(r.plan);
+  }
+
   ops.forEach((op, k) => { op.moving = faces.map(fc => fc.ops.has(k)); });
   land(ops.filter(op => op.kind === 'fold'), faces);
+
+  // Tucks: once the fold has landed, each layer of the flap slides down under the paper above it.
+  if (plans.length) {
+    for (const op of ops) { const p = op.prof; op.prof = x => p(Math.min(1, x / 0.7)); }
+    const mats = ops.map(o => opMatrix(o, 1));
+    const endOf = (fc: Face) => {
+      const i = faces.indexOf(fc), M = fc.M.clone();
+      ops.forEach((o, k) => { if (o.moving[i]) M.premultiply(mats[k]); });
+      return new Face(fc.poly, M);
+    };
+    for (const plan of plans) {
+      const fold = ops[plan.opIndex];
+      const tucked = new Set(plan.tucked);
+      const landed = plan.tucked.map(endOf);
+      const roof = Math.min(...plan.under.filter(u => landed.some(l => overlapsFromAbove(l, u))).map(u => u.maxY()));
+      let floor = 0;
+      for (const fc of faces) {
+        if (tucked.has(fc) || plan.under.includes(fc)) continue;
+        const g = endOf(fc), h = g.maxY();
+        if (h < roof - GAP / 8 && landed.some(l => overlapsFromAbove(l, g))) floor = Math.max(floor, h);
+      }
+      // Keep the flap's layers in order, spaced evenly between the paper below and the paper above.
+      const levels = [...new Set(landed.map(l => layerKey(l.maxY())))].sort((a, b) => a - b);
+      const delta = (roof - floor) / (levels.length + 1);
+      levels.forEach((lv, j) => {
+        const mine = plan.tucked.filter((_, k) => layerKey(landed[k].maxY()) === lv);
+        const y = Math.max(...mine.map(fc => endOf(fc).maxY()));
+        const set = new Set(mine);
+        ops.push({
+          kind: 'tuck', id: fold.id, group: `${fold.id}:tuck`, pivot: plan.axis[0].clone(), axis: plan.axis[1].clone(), angle: 0,
+          tr: new Vector3(0, floor + (j + 1) * delta - y, 0), lift: UP, prof: range(0.7, 1),
+          moving: faces.map(fc => set.has(fc)), crease: null, arrow: false, arrowEnd: 1,
+        });
+      });
+    }
+  }
 
   // A reverse fold swings layers down into the pocket; lift the model while it does, so nothing dips into the table.
   const rev = ops.filter(op => op.kind === 'reverse');
@@ -689,7 +831,38 @@ function compileCut(spec: StepSpec, index: number, start: Face[], ctx: RefContex
   const tab = spec.cut!.tab;
   if (tab) faces = markTab(tab, spec.cut!.slits, faces, ctx);
   ops.forEach(op => { op.moving = faces.map(() => false); });
+  if (spec.cut!.remove) ops.push(removePiece(spec.cut!.remove, faces, ctx));
   return finish(index, spec, 'table', faces, ops);
+}
+
+/**
+ * Cut a piece off: the paper the slits have cut free, holding `ref`. It slides away during the step,
+ * is tagged `removed`, and is gone from the next step on. If what's left is a rectangle on the flat
+ * sheet, corners, edges and at: fractions refer to that rectangle from then on.
+ */
+function removePiece(ref: string, faces: Face[], ctx: RefContext): Op {
+  const fp = flatPoint(ref, ctx);
+  const pieces = components(faces, ctx.cuts);
+  const piece = pieces.find(c => c.some(f => flatContains(f, fp)));
+  if (!piece) throw new RefError(`"${ref}" isn't on the paper, so there's no piece there to cut off.`);
+  if (piece.length === faces.length) throw new RefError(`The slits don't cut the piece at "${ref}" free from the rest of the paper.`);
+  const kept = faces.filter(f => !piece.includes(f));
+  for (const f of piece) f.tags.add('removed');
+  // What's left, on the flat sheet: a rectangle if it fills its own bounding box.
+  const pts = kept.flatMap(f => f.poly);
+  const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  const y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const area = kept.reduce((a, f) => a + f.area(), 0);
+  if (Math.abs(area - (x1 - x0) * (y1 - y0)) < 1e-3) ctx.sheet = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  ctx.trims ??= [];
+  ctx.trims.push({ area, sheet: ctx.sheet ?? { x: 0, y: 0, w: ctx.W, h: ctx.H } });
+  // Slide it away from what's left, a little off the table.
+  const centre = (fs: Face[]) => { const c = new Vector3(); fs.forEach(f => c.add(f.centroidWorld())); return c.multiplyScalar(1 / fs.length); };
+  const away = centre(piece).sub(centre(kept)).setY(0).normalize().multiplyScalar(6);
+  return {
+    kind: 'cut', pivot: new Vector3(), axis: UP.clone(), angle: 0, tr: new Vector3(away.x, 0.3, away.z), lift: UP,
+    prof: range(0.3, 1), moving: faces.map(f => piece.includes(f)), crease: null, arrow: false, arrowEnd: 1,
+  };
 }
 
 /**
@@ -882,7 +1055,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
   const stopAt = first ? (first.step ?? 0) : spec.steps.length;
   const { W, H } = first?.step == null && first ? { W: 21, H: 29.7 } : paperSize(spec.paper);
   const plane: CompiledPlane = {
-    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps, cuts: [],
+    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps, cuts: [], trims: [],
     done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
   };
   const ctx: RefContext = { W, H, creases: new Map(), cuts: plane.cuts };
@@ -899,6 +1072,12 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
       const issues = auditStep(plane, st);
       if (issues.length) throw new PlaneError(i, issues[0].message, issues);
       if (st.view === 'table') settle(st);
+      // A piece cut off this step is gone from the next one.
+      if (st.end.some(f => f.tags.has('removed'))) {
+        st.end = st.end.filter(f => !f.tags.has('removed'));
+        const t = ctx.trims!.at(-1)!;
+        plane.trims.push({ step: i, area: t.area, sheet: t.sheet });
+      }
       steps.push(st);
       const named = new Set([...(s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id), s.cut?.tab].filter(Boolean));
       for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });

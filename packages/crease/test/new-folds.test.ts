@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import valkyrie from '../../../planes/valkyrie.plane.json';
-import { auditPlane, compilePlane, compilePlaneSoFar, faceMatrix, stepMatrices, type PlaneSpec, type StepSpec } from '../src';
-import { components, sharedSegments } from '../src/geometry';
+import { auditPlane, compilePlane, compilePlaneSoFar, faceMatrix, stepMatrices, validatePlane, type PlaneSpec, type StepSpec } from '../src';
+import { components, overlapsFromAbove, sharedSegments } from '../src/geometry';
 
 const recipe = (steps: StepSpec[]): PlaneSpec => ({ id: 'test', name: 'Test', paper: 'A4', steps });
 const halve: StepSpec = { title: 'Fold in half', fold: { id: 'half', bring: 'edge:left', to: 'edge:right' } };
@@ -230,6 +230,36 @@ describe('cut tabs', () => {
   });
 });
 
+describe('cutting a piece off', () => {
+  // Cut the top 2.97 cm off an A4 sheet, then fold the new top-left corner down.
+  const trim: StepSpec = { title: 'Trim', cut: { slits: [['at:0,0.9', 'at:1,0.9']], remove: 'at:0.5,0.95' } };
+
+  it('removes the piece, and later steps refer to what is left', () => {
+    const plane = compilePlane(recipe([
+      trim,
+      { title: 'Corner', fold: { id: 'corner', bring: 'corner:top-left', to: 'at:0.5,1', through: 'at:0,0.5' } },
+    ]));
+    expect(auditPlane(plane)).toEqual([]);
+    expect(plane.trims).toEqual([{ step: 0, area: expect.closeTo(21 * 26.73, 6), sheet: { x: 0, y: 0, w: 21, h: expect.closeTo(26.73, 6) } }]);
+    expect(plane.steps[0].end.reduce((a, f) => a + f.area(), 0)).toBeCloseTo(21 * 26.73, 6);
+    // corner:top-left is now (0, 26.73), the corner of the trimmed sheet, not of the A4 sheet.
+    const moved = plane.steps[1].end.filter(f => f.tags.has('moved:corner'));
+    expect(moved.some(f => f.poly.some(([x, y]) => Math.abs(x) < 1e-6 && Math.abs(y - 26.73) < 1e-6))).toBe(true);
+  });
+
+  it('slides the piece away while the step plays', () => {
+    const st = compilePlane(recipe([trim])).steps[0];
+    const off = st.ops.find(o => o.kind === 'cut' && o.moving.some(Boolean));
+    expect(off).toBeDefined();
+    expect(st.faces.filter((f, i) => off!.moving[i]).every(f => f.tags.has('removed'))).toBe(true);
+  });
+
+  it('refuses a piece the slits do not cut free', () => {
+    const { error } = compilePlaneSoFar(recipe([{ title: 'Trim', cut: { slits: [['at:0,0.9', 'at:0.6,0.9']], remove: 'at:0.5,0.95' } }]));
+    expect(error?.detail).toMatch(/don't cut the piece/);
+  });
+});
+
 describe('fins in the flight pose', () => {
   it('stand upright on the Valkyrie wings', () => {
     const plane = compilePlane(valkyrie as PlaneSpec);
@@ -261,6 +291,67 @@ describe('fins in the flight pose', () => {
       const flat = local.clone().applyMatrix4(faceMatrix(st, i, stepMatrices(st, 1))).y;
       op.angle = saved;
       expect(bent).toBeGreaterThan(flat + 0.2);
+    }
+  });
+});
+
+describe('tuck', () => {
+  // Fold the top 14 cm of an A4 sheet down: the band is a pocket, open along its lower edge (y = 1.7).
+  // Then fold the bottom 1.7 cm up along that edge and tuck it in.
+  const band: StepSpec = { title: 'Band', fold: { id: 'band', parallel: 'edge:bottom', distance: 15.7, move: 'mid:edge:top' } };
+  const strip = (tuck: { flap: string; under: string }, distance = 1.7): StepSpec =>
+    ({ title: 'Strip', fold: { id: 'strip', parallel: 'edge:bottom', distance, move: 'at:0.5,0.01', tuck } });
+
+  it('slides the flap in under the paper it lands on, and passes every physical check', () => {
+    const plane = compilePlane(recipe([band, strip({ flap: 'at:0.5,0.02', under: 'band' })]));
+    expect(auditPlane(plane)).toEqual([]);
+    const end = plane.steps[1].end;
+    const sheet = end.filter(f => f.tags.size === 0 || ![...f.tags].some(t => t.startsWith('moved:')));
+    const bandFaces = end.filter(f => f.tags.has('moved:band'));
+    const stripFaces = end.filter(f => f.tags.has('moved:strip'));
+    expect(stripFaces.length).toBeGreaterThan(0);
+    for (const s of stripFaces) {
+      expect(s.maxY()).toBeGreaterThan(Math.max(...sheet.map(f => f.maxY())));
+      expect(s.maxY()).toBeLessThan(Math.min(...bandFaces.map(f => f.maxY())));
+    }
+  });
+
+  it('plays the tuck after the fold has landed', () => {
+    const st = compilePlane(recipe([band, strip({ flap: 'at:0.5,0.02', under: 'band' })])).steps[1];
+    const tuck = st.ops.filter(o => o.kind === 'tuck');
+    expect(tuck.length).toBe(1);
+    expect(tuck[0].tr!.y).toBeLessThan(0);
+    expect(tuck[0].prof(0.7)).toBe(0);
+  });
+
+  it('refuses a flap that is joined on two sides', () => {
+    // Folded on the band's lower edge but long enough to stick out past the top: it can't slide in.
+    const { error } = compilePlaneSoFar(recipe([
+      { title: 'Band', fold: { id: 'band', parallel: 'edge:bottom', distance: 23.7, move: 'mid:edge:top' } },
+      strip({ flap: 'at:0.5,0.5', under: 'band' }, 17.7),
+    ]));
+    expect(error?.detail).toMatch(/more than one line/);
+  });
+
+  it('says so when the flap does not land on that paper', () => {
+    const { error } = compilePlaneSoFar(recipe([band, strip({ flap: 'at:0.5,0.02', under: 'band' }, 1)]));
+    expect(error?.detail).toMatch(/doesn't land on paper from "band"/);
+  });
+
+  it('needs the id of an earlier fold to tuck under', () => {
+    const problems = validatePlane(recipe([band, strip({ flap: 'at:0.5,0.02', under: 'later' })]));
+    expect(problems.map(p => p.message).join(' ')).toMatch(/"tuck.under" must be the id of an earlier fold/);
+  });
+
+  it('locks the Valkyrie: the end of each swivelled band goes under the middle section', () => {
+    const plane = compilePlane(valkyrie as PlaneSpec);
+    for (const [k, side] of [[10, 'right'], [11, 'left']] as const) {
+      const end = plane.steps[k].end;
+      const flap = end.filter(f => f.tags.has(`moved:swivel-${side}`) && f.tags.has(`moved:side-${side}`));
+      const middle = end.filter(f => f.tags.has('moved:point') && f.tags.has('moved:top') && !f.tags.has(`moved:side-${side}`));
+      const tucked = flap.filter(f => middle.some(m => overlapsFromAbove(f, m) && f.maxY() < m.maxY()));
+      expect(tucked.length).toBeGreaterThan(0);
+      for (const f of flap) for (const m of middle) if (overlapsFromAbove(f, m)) expect(f.maxY()).toBeLessThan(m.maxY());
     }
   });
 });

@@ -18,7 +18,18 @@ export interface RefContext {
   creases: Map<string, [Vec2, Vec2][]>;
   /** Flat segments where the paper has been cut, so it no longer connects across them. */
   cuts?: [Vec2, Vec2][];
+  /**
+   * The sheet as it is now, in flat coordinates, once a strip has been cut off (default: the whole
+   * W × H sheet). Corners, edges and at: fractions refer to it.
+   */
+  sheet?: Rect;
+  /** Pieces cut off so far, newest last (filled in while compiling). */
+  trims?: { area: number; sheet: Rect }[];
 }
+
+/** A rectangle on the flat sheet: lower-left corner and size, in cm. */
+export interface Rect { x: number; y: number; w: number; h: number }
+const sheetOf = (ctx: RefContext): Rect => ctx.sheet ?? { x: 0, y: 0, w: ctx.W, h: ctx.H };
 
 export type Resolved =
   | { kind: 'point'; p: Vector3 }
@@ -26,17 +37,17 @@ export type Resolved =
 
 export class RefError extends Error {}
 
-const CORNERS: Record<string, (W: number, H: number) => Vec2> = {
-  'top-left': (_W, H) => [0, H],
-  'top-right': (W, H) => [W, H],
-  'bottom-left': () => [0, 0],
-  'bottom-right': W => [W, 0],
+const CORNERS: Record<string, (r: Rect) => Vec2> = {
+  'top-left': r => [r.x, r.y + r.h],
+  'top-right': r => [r.x + r.w, r.y + r.h],
+  'bottom-left': r => [r.x, r.y],
+  'bottom-right': r => [r.x + r.w, r.y],
 };
-const EDGES: Record<string, (W: number, H: number) => [Vec2, Vec2]> = {
-  top: (W, H) => [[0, H], [W, H]],
-  bottom: W => [[0, 0], [W, 0]],
-  left: (_W, H) => [[0, 0], [0, H]],
-  right: (W, H) => [[W, 0], [W, H]],
+const EDGES: Record<string, (r: Rect) => [Vec2, Vec2]> = {
+  top: r => [[r.x, r.y + r.h], [r.x + r.w, r.y + r.h]],
+  bottom: r => [[r.x, r.y], [r.x + r.w, r.y]],
+  left: r => [[r.x, r.y], [r.x, r.y + r.h]],
+  right: r => [[r.x + r.w, r.y], [r.x + r.w, r.y + r.h]],
 };
 
 export const REF_PATTERN = '^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$';
@@ -48,7 +59,7 @@ function flatSegments(ref: string, ctx: RefContext): [Vec2, Vec2][] {
   if (kind === 'edge') {
     const e = EDGES[name];
     if (!e) throw new RefError(`Unknown edge "${name}". Use top, bottom, left or right.`);
-    return [e(ctx.W, ctx.H)];
+    return [e(sheetOf(ctx))];
   }
   if (kind === 'crease') {
     const segs = ctx.creases.get(name);
@@ -75,12 +86,13 @@ export function flatPoint(ref: string, ctx: RefContext): Vec2 {
   if (kind === 'corner') {
     const c = CORNERS[name];
     if (!c) throw new RefError(`Unknown corner "${name}". Use top-left, top-right, bottom-left or bottom-right.`);
-    return c(ctx.W, ctx.H);
+    return c(sheetOf(ctx));
   }
   if (kind === 'at') {
     const [fx, fy] = name.split(',').map(Number);
     if (!Number.isFinite(fx) || !Number.isFinite(fy)) throw new RefError(`"${ref}" needs two numbers, like at:0.5,1.`);
-    return [fx * ctx.W, fy * ctx.H];
+    const r = sheetOf(ctx);
+    return [r.x + fx * r.w, r.y + fy * r.h];
   }
   if (kind === 'mid') {
     const segs = flatSegments(name, ctx);

@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { Face } from './geometry';
-import { resolve, type RefContext } from './refs';
+import { resolve, type Rect, type RefContext } from './refs';
 import type { CompiledPlane } from './compile';
 import type { Vec2 } from './types';
 
@@ -28,7 +28,14 @@ function contextBefore(plane: CompiledPlane, index: number): RefContext {
     W: plane.width,
     H: plane.height,
     creases: new Map(plane.creases.filter(c => c.step < index).map(c => [c.id, c.segs])),
+    cuts: plane.cuts,
+    sheet: sheetBefore(plane, index),
   };
+}
+
+/** The flat sheet that corners, edges and at: fractions refer to before step `index`: smaller once a piece is cut off. */
+export function sheetBefore(plane: CompiledPlane, index: number): Rect {
+  return (plane.trims ?? []).filter(t => t.step < index).at(-1)?.sheet ?? { x: 0, y: 0, w: plane.width, h: plane.height };
 }
 
 export interface RefInfo {
@@ -186,7 +193,8 @@ export function describeAfter(plane: CompiledPlane, index: number): StateReport 
     const x = minX + ((maxX - minX) * (i + 0.513)) / (N + 1), y = minY + ((maxY - minY) * (j + 0.487)) / (N + 1);
     maxLayers = Math.max(maxLayers, polys.filter(p => contains(p, x, y)).length);
   }
-  const total = W * H;
+  // Less paper once a piece has been cut off.
+  const total = (plane.trims ?? []).filter(t => t.step <= index).at(-1)?.area ?? W * H;
   const up = faces.reduce((s, f) => s + (normalUp(f) > 0 ? f.area() : 0), 0);
   const top = faces.reduce((a, b) => (b.maxY() > a.maxY() ? b : a));
   report.maxLayers = maxLayers;

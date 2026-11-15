@@ -26,6 +26,7 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
         if (!Array.isArray(sl) || sl.length !== 2) { say('Each slit is two points: ["<from>", "<to>"].'); continue; }
         for (const r of sl) if (!isRef(r)) say(`"${r}" in a slit isn't a reference I know. Try corner:top-left, mid:edge:top or at:0.5,1.`);
       }
+      if (s.cut.remove !== undefined && !isRef(s.cut.remove)) say(`"cut.remove" must be a point on the piece to cut off, like at:0.5,0.95.`);
       if (s.cut.tab !== undefined) {
         if (!/^[a-z0-9-]+$/.test(s.cut.tab)) say('"cut.tab" must use lowercase letters, numbers and dashes, like "elevator".');
         else if (ids.has(s.cut.tab)) say(`"cut.tab" "${s.cut.tab}" is already used by an earlier fold or tab.`);
@@ -49,6 +50,11 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
       const line = f.line !== undefined && f.move !== undefined;
       if (!bringTo && !alongMove && !parallel && !line) say(`${label}use "bring" + "to", "along" + "move", "parallel" + "distance" + "move", or "line" + "move".`);
       if (f.reverse !== undefined && f.reverse !== 'inside') say(`${label}"reverse" can only be "inside" for now.`);
+      if (f.tuck !== undefined) {
+        if (!f.tuck.flap || !isRef(f.tuck.flap)) say(`${label}"tuck.flap" must be a point on the flap that tucks in, like at:0.95,0.95.`);
+        if (!f.tuck.under || !ids.has(f.tuck.under)) say(`${label}"tuck.under" must be the id of an earlier fold.`);
+        if (f.swivel || f.reverse || f.unfold) say(`${label}a tuck goes with a plain fold, not a swivel, reverse fold or unfold.`);
+      }
       if (f.swivel !== undefined) {
         if (f.swivel !== true) say(`${label}"swivel" is either true or left out.`);
         else if (!f.flap) say(`${label}a swivel needs "flap": a point on the layer that folds over.`);
