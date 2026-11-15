@@ -129,7 +129,7 @@
     "fold": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Say it like an instruction: bring X to Y (through Z), fold along a line and move one side, or fold parallel to a line at a distance.",
+      "description": "Say it like an instruction: bring X to Y (through Z), fold along a line and move one side, fold parallel to a line at a distance, or fold on the line through two points.",
       "properties": {
         "id": {
           "type": "string",
@@ -183,6 +183,16 @@
           "exclusiveMinimum": 0,
           "description": "With parallel: how far from that line, in cm."
         },
+        "line": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$"
+          },
+          "description": "Fold on the straight line through these two points. Needs move."
+        },
         "flap": {
           "type": "string",
           "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
@@ -212,6 +222,12 @@
           "required": [
             "parallel",
             "distance",
+            "move"
+          ]
+        },
+        {
+          "required": [
+            "line",
             "move"
           ]
         }
@@ -281,6 +297,11 @@
                 }
               },
               "description": "Each slit runs from the first point to the second."
+            },
+            "tab": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]+$",
+              "description": "With exactly two slits: names the tab between them. It hinges on the line joining the slits' ends (crease:<tab>), and the flight pose can bend it with tabs."
             }
           }
         },
@@ -340,6 +361,31 @@
               "maximum": 180,
               "default": 90,
               "description": "How far the fins open from lying flat, in degrees."
+            },
+            "tabs": {
+              "type": "array",
+              "description": "Tabs cut earlier (elevators) to bend in flight.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$",
+                    "description": "The tab's name from a cut step."
+                  },
+                  "angle": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90,
+                    "default": 20,
+                    "description": "Degrees; positive bends the tab up, toward the top of the plane in flight."
+                  }
+                }
+              }
             }
           }
         }

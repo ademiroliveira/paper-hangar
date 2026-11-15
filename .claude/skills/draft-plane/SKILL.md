@@ -34,6 +34,7 @@ Write the steps as a person would say them, then match each to a fold kind from 
 | "Fold the corner to the centre line" | `bring` the corner `to` the crease `through` the point the fold must pass |
 | "Fold in half" (along an existing crease) | `along` the crease, `move` a point on the side that moves |
 | "Fold the wing down 2.5 cm from the bottom" | `parallel` to the crease, `distance` in cm, `move` |
+| "Fold from the nose tip to 2.5 cm from the bottom at the back" | `line` through the two points, `move` |
 | "Fold the left edge to the right edge" | `bring` the edge `to` the edge |
 | "Turn it over" | `flip` |
 | A mountain fold (away from you) | `flip`, then the fold |
@@ -41,10 +42,11 @@ Write the steps as a person would say them, then match each to a fold kind from 
 | "Fold only this flap" (two flaps are equally high) | the fold with `"flap"`: a point on that flap |
 | "Push the corner in between the layers" (inside reverse fold) | the fold with `"reverse": "inside"` |
 | "Cut a slit" | a `cut` step with `slits` |
+| "Cut two slits and bend the tab up" (elevators) | a `cut` step with two `slits` and a `tab` name, then the pose's `tabs` |
 | "Fold up a wingtip fin" | the fold, then list its id in the pose's `fins` |
 | "Open the wings" | `pose` |
 
-If a step needs anything else, it's a format gap. Known gaps today: outside-reverse folds, squash folds, tucking a flap into a pocket, sink folds, curved folds, bending cut tabs, tape and paper clips.
+If a step needs anything else, it's a format gap. Known gaps today: outside-reverse folds, squash and swivel folds, tucking a flap into a pocket, sink folds, curved folds, tape and paper clips.
 
 ### 3. Write the draft, a few steps at a time
 

@@ -9,6 +9,7 @@ export type PaperSpec = 'A4' | 'Letter' | { width: number; height: number };
  *  - { bring: "edge:left", to: "edge:right" }
  *  - { along: "crease:center", move: "corner:bottom-left" }
  *  - { parallel: "crease:center", distance: 2.5, move: "corner:bottom-left" }
+ *  - { line: ["at:0.5,0.8", "at:0.6,0"], move: "corner:bottom-right" }
  */
 export interface FoldSpec {
   /** Name for the crease this fold makes, so later steps can point at it as `crease:<id>`. */
@@ -27,6 +28,8 @@ export interface FoldSpec {
   parallel?: string;
   /** With `parallel`: how far from that line, in cm. */
   distance?: number;
+  /** Fold on the straight line through these two points (with `move`): "fold from the nose tip to 2.5 cm from the keel". */
+  line?: [string, string];
   /** `top` folds only the uppermost flap; `all` (default) folds every layer on the moving side. */
   layers?: 'all' | 'top';
   /**
@@ -47,6 +50,18 @@ export interface FoldSpec {
 export interface CutSpec {
   /** One or more slits. Each runs from the first point to the second. */
   slits: [string, string][];
+  /**
+   * With exactly two slits: name the tab between them (an elevator, say). The tab hinges on the line
+   * joining the slits' ends, which becomes `crease:<tab>`, and the flight pose can bend it with `tabs`.
+   */
+  tab?: string;
+}
+
+export interface TabBend {
+  /** The tab's name, from a cut step. */
+  id: string;
+  /** Degrees to bend it. Positive bends the tab up (toward the top of the plane in flight). Default 20. */
+  angle?: number;
 }
 
 export interface FlipSpec {
@@ -70,6 +85,8 @@ export interface PoseSpec {
   fins?: string[];
   /** How far the fins open from lying flat, in degrees. Default 90 (upright). */
   finAngle?: number;
+  /** Tabs cut earlier (elevators) to bend, each by its own angle. */
+  tabs?: TabBend[];
 }
 
 export interface StepSpec {

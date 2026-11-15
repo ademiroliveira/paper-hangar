@@ -131,6 +131,45 @@ describe('cut', () => {
   });
 });
 
+describe('fold on a line through two points', () => {
+  it('creases exactly on that line', () => {
+    const plane = compilePlane(recipe([
+      { title: 'Diagonal', fold: { id: 'diag', line: ['mid:edge:top', 'corner:bottom-left'], move: 'corner:top-left' } },
+    ]));
+    expect(auditPlane(plane)).toEqual([]);
+    const segs = plane.creases.find(c => c.id === 'diag')!.segs;
+    expect(segs.length).toBeGreaterThan(0);
+    // The line from (10.5, 29.7) to (0, 0): every crease point satisfies 29.7·x − 10.5·y = 0.
+    for (const [p, q] of segs) for (const [x, y] of [p, q]) expect(Math.abs(29.7 * x - 10.5 * y)).toBeLessThan(1e-6);
+  });
+
+  it('refuses two points in the same place', () => {
+    const { error } = compilePlaneSoFar(recipe([
+      { title: 'Nothing', fold: { line: ['corner:top-left', 'corner:top-left'], move: 'corner:bottom-right' } },
+    ]));
+    expect(error?.detail).toMatch(/don't make a line/);
+  });
+});
+
+describe('cut tabs', () => {
+  const slits: [string, string][] = [['at:0.6,0', 'at:0.6,0.05'], ['at:0.8,0', 'at:0.8,0.05']];
+
+  it('names the paper between two slits, in every layer, and records its hinge', () => {
+    const plane = compilePlane(recipe([halve, { title: 'Elevator', cut: { slits, tab: 'elevator' } }]));
+    expect(auditPlane(plane)).toEqual([]);
+    const tab = plane.steps[1].end.filter(f => f.tags.has('tab:elevator'));
+    expect(new Set(tab.map(f => Math.round(f.maxY() * 100))).size).toBe(2);
+    // Each layer's tab is the 4.2 × 1.485 cm strip between the slits.
+    expect(tab.reduce((s, f) => s + f.area(), 0)).toBeCloseTo(2 * 4.2 * 1.485, 6);
+    expect(plane.creases.some(c => c.id === 'elevator' && c.named)).toBe(true);
+  });
+
+  it('needs exactly two slits', () => {
+    const { error } = compilePlaneSoFar(recipe([halve, { title: 'Cut', cut: { slits: [slits[0]], tab: 'elevator' } }]));
+    expect(error?.detail).toMatch(/exactly two slits/);
+  });
+});
+
 describe('fins in the flight pose', () => {
   it('stand upright on the Valkyrie wings', () => {
     const plane = compilePlane(valkyrie as PlaneSpec);
@@ -143,6 +182,25 @@ describe('fins in the flight pose', () => {
       expect(j).toBeGreaterThanOrEqual(0);
       const a = normal(st.faces[i].world(faceMatrix(st, i, mats))), b = normal(st.faces[j].world(faceMatrix(st, j, mats)));
       expect(Math.abs(a.dot(b))).toBeLessThan(0.05);
+    }
+  });
+
+  it('bends the elevator tab up on both wings', () => {
+    const plane = compilePlane(valkyrie as PlaneSpec);
+    const st = plane.steps.at(-1)!;
+    const tabOps = st.ops.filter(o => o.kind === 'pose' && st.faces.some((f, i) => o.moving[i] && f.tags.has('tab:elevator')) && o.moving.filter(Boolean).length < 4);
+    expect(tabOps.length).toBe(2);
+    for (const op of tabOps) {
+      const i = op.moving.indexOf(true), f = st.faces[i];
+      const dist = (v: Vector3) => v.clone().sub(op.pivot).setY(0).cross(op.axis).length();
+      const far = f.world().reduce((m, v) => (dist(v) > dist(m) ? v : m));
+      const local = far.clone().applyMatrix4(f.M.clone().invert());
+      const bent = local.clone().applyMatrix4(faceMatrix(st, i, stepMatrices(st, 1))).y;
+      const saved = op.angle;
+      op.angle = 0;
+      const flat = local.clone().applyMatrix4(faceMatrix(st, i, stepMatrices(st, 1))).y;
+      op.angle = saved;
+      expect(bent).toBeGreaterThan(flat + 0.2);
     }
   });
 });
