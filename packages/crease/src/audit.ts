@@ -44,6 +44,8 @@ export function auditStep(plane: CompiledPlane, step: Step): AuditIssue[] {
   const groupOf = (i: number) => step.ops.find(o => o.group && o.moving[i])?.group;
   const end = stepMatrices(step, 1);
   step.ops.forEach(op => {
+    // Settling only changes how high layers sit; it can't pull paper apart across the table.
+    if (op.kind === 'settle') return;
     for (const [i, j, segs] of pairs) {
       if (op.moving[i] === op.moving[j]) continue;
       if (op.group && groupOf(i) === op.group && groupOf(j) === op.group) {

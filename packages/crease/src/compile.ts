@@ -20,10 +20,11 @@ export const range = (a: number, b: number): Profile => t => smooth(Math.min(1, 
 /**
  * One rigid motion inside a step: rotate some faces about an axis, optionally translate.
  * `reverse` ops turn one layer of a pocket inside out;
- * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut.
+ * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut;
+ * `settle` lets layers drop onto the paper right under them at the end of a step.
  */
 export interface Op {
-  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'lift' | 'cut';
+  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'lift' | 'cut' | 'settle';
   id?: string;
   /** Ops that move one piece of paper together (the layers of a reverse fold). Seams between them may open mid-motion. */
   group?: string;
@@ -227,24 +228,36 @@ function solveFold(f: FoldSpec, faces: Face[], ctx: RefContext): Line {
   throw new RefError(`Can't bring a line ("${f.bring}") onto a point ("${f.to}"). Swap them, or use a line target.`);
 }
 
-/** Lift folded faces so they land just above everything they cover. */
+/**
+ * Lift folded faces so they land just above the paper they cover, and no higher.
+ * Paper elsewhere on the table doesn't matter: lifting over it would leave gaps between layers
+ * that show once the plane stands up. Earlier folds in the same step count as paper too.
+ */
 function land(ops: Op[], faces: Face[]) {
+  const obstacles: Face[] = faces.filter((_, i) => !ops.some(op => op.moving[i]));
   for (const op of ops) {
     if (op.angle < 170 * DEG || op.kind === 'pose') continue;
-    let mov = -Infinity, stat = -Infinity;
-    faces.forEach((f, i) => {
-      const h = Math.max(...f.world().map(v => v.dot(op.lift)));
-      if (op.moving[i]) mov = Math.max(mov, h); else stat = Math.max(stat, h);
-    });
-    op.tr = op.lift.clone().multiplyScalar(mov + (stat > -Infinity ? stat + GAP : 0));
+    const turn = opMatrix({ ...op, tr: null, hop: undefined }, 1);
+    const landed: Face[] = [];
+    faces.forEach((f, i) => { if (op.moving[i]) landed.push(new Face(f.poly, f.M.clone().premultiply(turn))); });
+    const low = (f: Face) => Math.min(...f.world().map(v => v.dot(op.lift)));
+    const high = (f: Face) => Math.max(...f.world().map(v => v.dot(op.lift)));
+    // Never below the table, and above everything it lands on.
+    let lift = Math.max(0, ...landed.map(f => -low(f)));
+    for (const m of landed) for (const s of obstacles) {
+      if (overlapsFromAbove(m, s)) lift = Math.max(lift, high(s) + GAP - low(m));
+    }
+    op.tr = op.lift.clone().multiplyScalar(lift);
+    const end = new Matrix4().makeTranslation(op.tr.x, op.tr.y, op.tr.z);
+    for (const m of landed) obstacles.push(new Face(m.poly, m.M.clone().premultiply(end)));
   }
 }
 
 function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[], ops: Op[]): Step {
   const step: Step = {
     index, title: spec.title, text: spec.text ?? '', view, faces, ops,
-    // Lifting the whole model out of the way isn't part of the fold; don't highlight it.
-    movingAny: faces.map((_, i) => ops.some(op => op.kind !== 'lift' && op.moving[i])),
+    // Lifting the model out of the way, or layers settling, isn't part of the fold; don't highlight it.
+    movingAny: faces.map((_, i) => ops.some(op => op.kind !== 'lift' && op.kind !== 'settle' && op.moving[i])),
     end: [],
   };
   const mats = stepMatrices(step, 1);
@@ -254,6 +267,38 @@ function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[]
     return nf;
   });
   return step;
+}
+
+/**
+ * Let every layer drop onto the paper right under it, keeping which layer is above which.
+ * Without this, a flap folded over a thick part of the model keeps that thickness as gaps
+ * wherever it lies on fewer layers, and the gaps grow fold after fold until the layers
+ * visibly come apart once the plane stands up. Adds the drop as a short last move of the step.
+ */
+function settle(step: Step) {
+  const end = step.end;
+  const order = end.map((_, i) => i).sort((a, b) => end[a].maxY() - end[b].maxY());
+  const h: number[] = new Array(end.length).fill(0);
+  const placed: number[] = [];
+  for (const i of order) {
+    for (const j of placed) if (overlapsFromAbove(end[i], end[j])) h[i] = Math.max(h[i], h[j] + GAP);
+    placed.push(i);
+  }
+  const groups = new Map<number, number[]>();
+  end.forEach((f, i) => {
+    const dy = Math.round((h[i] - f.maxY()) / (GAP / 64)) * (GAP / 64);
+    if (Math.abs(dy) < GAP / 128) return;
+    if (!groups.has(dy)) groups.set(dy, []);
+    groups.get(dy)!.push(i);
+  });
+  for (const [dy, idx] of groups) {
+    const set = new Set(idx);
+    step.ops.push({
+      kind: 'settle', pivot: new Vector3(), axis: UP.clone(), angle: 0, tr: new Vector3(0, dy, 0), lift: UP,
+      prof: range(0.8, 1), moving: step.faces.map((_, i) => set.has(i)), crease: null, arrow: false, arrowEnd: 1,
+    });
+    for (const i of idx) end[i].M.premultiply(new Matrix4().makeTranslation(0, dy, 0));
+  }
 }
 
 /* ---------- step kinds ---------- */
@@ -616,6 +661,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
       // Physical checks: refuse anything a real sheet of paper couldn't do.
       const issues = auditStep(plane, st);
       if (issues.length) throw new PlaneError(i, issues[0].message, issues);
+      if (st.view === 'table') settle(st);
       steps.push(st);
       const named = new Set((s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id).filter(Boolean));
       for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });
