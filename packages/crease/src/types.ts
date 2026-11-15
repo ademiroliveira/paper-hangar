@@ -29,8 +29,24 @@ export interface FoldSpec {
   distance?: number;
   /** `top` folds only the uppermost flap; `all` (default) folds every layer on the moving side. */
   layers?: 'all' | 'top';
+  /**
+   * Fold only the flap that holds this point of the paper (and anything lying on top of it).
+   * Use it when two flaps are equally high and `layers: "top"` can't tell which one you mean.
+   */
+  flap?: string;
   /** Fold, press a crease, then open it flat again. */
   unfold?: boolean;
+  /**
+   * `inside`: an inside reverse fold. The paper on the moving side is a pocket (layers joined along
+   * a fold); its point turns inside out and ends up between the pocket's two sides.
+   */
+  reverse?: 'inside';
+}
+
+/** Cut through every layer along a straight line, from one point to the other. */
+export interface CutSpec {
+  /** One or more slits. Each runs from the first point to the second. */
+  slits: [string, string][];
 }
 
 export interface FlipSpec {
@@ -50,6 +66,10 @@ export interface PoseSpec {
   dihedral?: number;
   /** A point at the front of the plane. Needed when the spine runs parallel to the keel; otherwise the nose is where they meet. */
   nose?: string;
+  /** Ids of folds that made wingtip fins. They open to stand at `finAngle` to their wing. */
+  fins?: string[];
+  /** How far the fins open from lying flat, in degrees. Default 90 (upright). */
+  finAngle?: number;
 }
 
 export interface StepSpec {
@@ -59,6 +79,7 @@ export interface StepSpec {
   /** Several folds that happen at the same time (for example, both corners). */
   folds?: FoldSpec[];
   flip?: boolean | FlipSpec;
+  cut?: CutSpec;
   pose?: PoseSpec;
 }
 

@@ -38,9 +38,13 @@ Write the steps as a person would say them, then match each to a fold kind from 
 | "Turn it over" | `flip` |
 | A mountain fold (away from you) | `flip`, then the fold |
 | "Fold one wing" | the fold with `"layers": "top"` |
+| "Fold only this flap" (two flaps are equally high) | the fold with `"flap"`: a point on that flap |
+| "Push the corner in between the layers" (inside reverse fold) | the fold with `"reverse": "inside"` |
+| "Cut a slit" | a `cut` step with `slits` |
+| "Fold up a wingtip fin" | the fold, then list its id in the pose's `fins` |
 | "Open the wings" | `pose` |
 
-If a step needs anything else, it's a format gap. Known gaps today: inside-reverse folds (tail fins, some noses), outside-reverse folds, squash folds, tucking a flap into a pocket, sink folds, curved folds, cuts, tape and paper clips.
+If a step needs anything else, it's a format gap. Known gaps today: outside-reverse folds, squash folds, tucking a flap into a pocket, sink folds, curved folds, bending cut tabs, tape and paper clips.
 
 ### 3. Write the draft, a few steps at a time
 

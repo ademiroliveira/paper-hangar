@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import { Vector3 } from 'three';
+import valkyrie from '../../../planes/valkyrie.plane.json';
+import { auditPlane, compilePlane, compilePlaneSoFar, faceMatrix, stepMatrices, type PlaneSpec, type StepSpec } from '../src';
+import { components, sharedSegments } from '../src/geometry';
+
+const recipe = (steps: StepSpec[]): PlaneSpec => ({ id: 'test', name: 'Test', paper: 'A4', steps });
+const halve: StepSpec = { title: 'Fold in half', fold: { id: 'half', bring: 'edge:left', to: 'edge:right' } };
+const normal = (vs: Vector3[]) => new Vector3().crossVectors(vs[1].clone().sub(vs[0]), vs[2].clone().sub(vs[0])).normalize();
+
+describe('inside reverse fold', () => {
+  // Folded in half, the sheet is a pocket joined along the middle. Reverse the top of it in.
+  const spec = recipe([
+    halve,
+    { title: 'Reverse the top in', fold: { id: 'rev', bring: 'mid:edge:top', to: 'at:0.5,0.8', reverse: 'inside' } },
+  ]);
+
+  it('folds cleanly and passes every physical check', () => {
+    const plane = compilePlane(spec);
+    expect(auditPlane(plane)).toEqual([]);
+  });
+
+  it('puts the turned-in paper between the two sides of the pocket', () => {
+    const plane = compilePlane(spec);
+    const end = plane.steps[1].end;
+    const moved = end.filter(f => f.tags.has('moved:rev'));
+    const still = end.filter(f => !f.tags.has('moved:rev'));
+    expect(moved.length).toBeGreaterThanOrEqual(2);
+    const lo = Math.min(...still.map(f => f.maxY())), hi = Math.max(...still.map(f => f.maxY()));
+    for (const f of moved) {
+      expect(f.maxY()).toBeGreaterThan(lo);
+      expect(f.maxY()).toBeLessThan(hi);
+    }
+    // Nothing sticks out above the fold line any more (y = 0.8 * 29.7 + half the distance to the top).
+    const line = (29.7 + 0.8 * 29.7) / 2;
+    for (const f of end) for (const v of f.world()) expect(-v.z).toBeLessThanOrEqual(line + 1e-6);
+  });
+
+  it('keeps the two sides joined where they land', () => {
+    const plane = compilePlane(spec);
+    const st = plane.steps[1];
+    const mats = stepMatrices(st, 1);
+    for (let i = 0; i < st.faces.length; i++) for (let j = i + 1; j < st.faces.length; j++) {
+      for (const seg of sharedSegments(st.faces[i], st.faces[j])) for (const p of seg) {
+        const a = new Vector3(p[0], 0, -p[1]).applyMatrix4(faceMatrix(st, i, mats));
+        const b = new Vector3(p[0], 0, -p[1]).applyMatrix4(faceMatrix(st, j, mats));
+        expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeLessThan(1e-3);
+      }
+    }
+  });
+
+  it('refuses a single layer: there is no pocket to turn into', () => {
+    const { error } = compilePlaneSoFar(recipe([
+      { title: 'Reverse', fold: { bring: 'corner:top-left', to: 'at:0.2,0.8', reverse: 'inside' } },
+    ]));
+    expect(error?.detail).toMatch(/needs a pocket/);
+  });
+});
+
+describe('flap', () => {
+  const corners: StepSpec = {
+    title: 'Corners in',
+    folds: [
+      { id: 'cl', bring: 'corner:top-left', to: 'edge:right', through: 'mid:edge:top' },
+      { id: 'cr', bring: 'corner:top-right', to: 'edge:left', through: 'mid:edge:top' },
+    ],
+  };
+
+  it('folds only the flap that holds the point', () => {
+    const spec: PlaneSpec = {
+      id: 'test', name: 'Test', paper: 'A4',
+      steps: [
+        { title: 'Center', fold: { id: 'center', bring: 'edge:left', to: 'edge:right', unfold: true } },
+        { title: 'Corners in', folds: [
+          { id: 'cl', bring: 'corner:top-left', to: 'crease:center', through: 'mid:edge:top' },
+          { id: 'cr', bring: 'corner:top-right', to: 'crease:center', through: 'mid:edge:top' },
+        ] },
+        { title: 'Fold the left flap back', fold: { id: 'back', parallel: 'crease:cl', distance: 2, move: 'corner:top-left', flap: 'corner:top-left' } },
+      ],
+    };
+    const plane = compilePlane(spec);
+    expect(auditPlane(plane)).toEqual([]);
+    const moved = plane.steps[2].end.filter(f => f.tags.has('moved:back'));
+    expect(moved.length).toBeGreaterThan(0);
+    expect(moved.every(f => f.tags.has('moved:cl') && !f.tags.has('moved:cr'))).toBe(true);
+  });
+
+  it('says so when the point is not on paper the fold moves', () => {
+    const { error } = compilePlaneSoFar(recipe([
+      corners,
+      { title: 'Fold', fold: { parallel: 'edge:bottom', distance: 5, move: 'mid:edge:top', flap: 'corner:bottom-left' } },
+    ]));
+    expect(error?.detail).toMatch(/isn't on the paper this fold moves/);
+  });
+});
+
+describe('cut', () => {
+  const spec = recipe([
+    halve,
+    { title: 'Slit', cut: { slits: [['at:0.75,0', 'at:0.75,0.1']] } },
+  ]);
+
+  it('cuts through every layer and keeps the sheet whole', () => {
+    const plane = compilePlane(spec);
+    expect(auditPlane(plane)).toEqual([]);
+    expect(plane.cuts.length).toBe(2);
+    const area = plane.steps[1].end.reduce((s, f) => s + f.area(), 0);
+    expect(area).toBeCloseTo(21 * 29.7, 6);
+  });
+
+  it('leaves the paper unjoined along the slit, and joined past its end', () => {
+    const plane = compilePlane(spec);
+    const end = plane.steps[1].end;
+    // The slit runs up from the bottom edge at x = 15.75 cm on the table: x = 15.75 on the bottom layer
+    // and x = 5.25 on the layer folded over it. Faces either side touch there, but the cut separates them.
+    const onSlit = ([p, q]: [number, number][]) =>
+      [15.75, 5.25].some(x => Math.abs(p[0] - x) < 1e-6 && Math.abs(q[0] - x) < 1e-6) && Math.max(p[1], q[1]) <= 2.97 + 1e-6;
+    const pairsOnSlit = end.flatMap((a, i) => end.slice(i + 1).map(b => [a, b] as const))
+      .filter(([a, b]) => sharedSegments(a, b).some(onSlit));
+    expect(pairsOnSlit.length).toBe(2);
+    for (const [a, b] of pairsOnSlit) expect(sharedSegments(a, b, plane.cuts).filter(onSlit)).toEqual([]);
+    // Each layer is still one piece of paper: the slit doesn't cut it in two.
+    const layers = new Map<number, typeof end>();
+    for (const f of end) { const k = Math.round(f.maxY() * 100); layers.set(k, [...(layers.get(k) ?? []), f]); }
+    for (const fs of layers.values()) expect(components(fs, plane.cuts).length).toBe(1);
+  });
+
+  it('refuses a slit with no length', () => {
+    const { error } = compilePlaneSoFar(recipe([halve, { title: 'Slit', cut: { slits: [['at:0.75,0.5', 'at:0.75,0.5']] } }]));
+    expect(error?.detail).toMatch(/has no length/);
+  });
+});
+
+describe('fins in the flight pose', () => {
+  it('stand upright on the Valkyrie wings', () => {
+    const plane = compilePlane(valkyrie as PlaneSpec);
+    const st = plane.steps.at(-1)!;
+    const mats = stepMatrices(st, 1);
+    for (const fin of ['fin-1', 'fin-2']) {
+      const i = st.faces.findIndex(f => f.tags.has(`moved:${fin}`) && f.area() > 1);
+      const j = st.faces.findIndex((f, k) => k !== i && !f.tags.has(`moved:${fin}`) && sharedSegments(st.faces[i], f).length);
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(j).toBeGreaterThanOrEqual(0);
+      const a = normal(st.faces[i].world(faceMatrix(st, i, mats))), b = normal(st.faces[j].world(faceMatrix(st, j, mats)));
+      expect(Math.abs(a.dot(b))).toBeLessThan(0.05);
+    }
+  });
+});

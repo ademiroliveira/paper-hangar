@@ -1,0 +1,281 @@
+{
+  "$schema": "../packages/crease/plane.schema.json",
+  "id": "valkyrie",
+  "name": "Valkyrie",
+  "summary": "Big wings, wingtip fins and layers locked at the nose. It floats slowly and stays up a long time.",
+  "difficulty": 3,
+  "paper": {
+    "width": 21.59,
+    "height": 25.4
+  },
+  "author": "Kyle Boyer",
+  "sources": [
+    {
+      "title": "The POWERUP Paper Airplane Book, pp. 37–39 (photos from the requester)",
+      "note": "Folding order, measurements and diagrams for every step, and the finished shape"
+    }
+  ],
+  "assumptions": [
+    "The recipe starts from US Letter with 2.5 cm (1 in) cut off the top: 21.6 × 25.4 cm.",
+    "Step 3: \"about 1¼ in from the top\" is read as the crease sitting 3.2 cm below the tip.",
+    "Step 5: the fold line is 2.5 cm (1 in) below the top edge of the outward-folded flaps, as the diagram marks it.",
+    "Steps 6–7: the book calls this a swivel fold. Its result, a straight slant from the top edge down the side, is folded here as an inside reverse fold of the pocket corner along the first corner crease.",
+    "Step 9: \"the outer edges\" are read as the sheet's straight side edges, folded onto the diagonal creases. This matches the steep sides in the book's next diagram.",
+    "Steps 10–11: the app folds each side along its diagonal crease but doesn't show the small flap being tucked under the middle section. The photos don't make clear which flap it is. The step text keeps the book's instruction.",
+    "Steps 14 and 16: the wings fold parallel to the bottom fold, 2.5 cm (1 in) from it. The book marks 1 in at the back, and the small nose tab in its later diagrams fits a parallel fold.",
+    "Steps 17 and 19: the fins are about 1.5 cm wide. The book shows the line but no measurement.",
+    "Step 20: the book shows two slits in the back edge without measurements. The recipe uses two 1.5 cm slits, 2 cm apart, between the fin and the body. The app doesn't bend the tabs."
+  ],
+  "steps": [
+    {
+      "title": "Crease the middle",
+      "text": "Start with US Letter trimmed to 21.6 × 25.4 cm (cut 2.5 cm, 1 in, off the top). Fold it in half the long way, crease, and open it again.",
+      "fold": {
+        "id": "center",
+        "bring": "edge:left",
+        "to": "edge:right",
+        "unfold": true
+      }
+    },
+    {
+      "title": "Fold the top corners in",
+      "text": "Bring each top corner down to the center crease to make a point.",
+      "folds": [
+        {
+          "id": "corner-left",
+          "bring": "corner:top-left",
+          "to": "crease:center",
+          "through": "mid:edge:top"
+        },
+        {
+          "id": "corner-right",
+          "bring": "corner:top-right",
+          "to": "crease:center",
+          "through": "mid:edge:top"
+        }
+      ]
+    },
+    {
+      "title": "Crease the point",
+      "text": "Fold the tip straight down so the crease sits about 3.2 cm (1¼ in) below it. Crease well and open it again.",
+      "fold": {
+        "id": "point",
+        "bring": "mid:edge:top",
+        "to": "at:0.5,0.75",
+        "unfold": true
+      }
+    },
+    {
+      "title": "Fold the inner edges out",
+      "text": "On each flap, fold the edge that lies along the center out to the side so it lands on the crease you just made. The flap corners will stick out past the sides of the point.",
+      "folds": [
+        {
+          "id": "wing-left",
+          "parallel": "crease:corner-left",
+          "distance": 2.245064,
+          "move": "corner:top-left",
+          "flap": "corner:top-left"
+        },
+        {
+          "id": "wing-right",
+          "parallel": "crease:corner-right",
+          "distance": 2.245064,
+          "move": "corner:top-right",
+          "flap": "corner:top-right"
+        }
+      ]
+    },
+    {
+      "title": "Fold the top down",
+      "text": "Fold the whole top section down on a line 2.5 cm (1 in) below the top edge of the flaps you just folded out.",
+      "fold": {
+        "id": "top",
+        "parallel": "edge:bottom",
+        "distance": 19.685,
+        "move": "mid:edge:top"
+      }
+    },
+    {
+      "title": "Reverse fold the right corner",
+      "text": "At the top right, the flap's corner forms a little pocket. Open it slightly and push the corner down inside, between its two layers, so the side runs in one straight slant from the top edge.",
+      "fold": {
+        "id": "lock-right",
+        "bring": "at:1,0.9",
+        "to": "at:0.764706,0.7",
+        "reverse": "inside"
+      }
+    },
+    {
+      "title": "Reverse fold the left corner",
+      "text": "Do the same on the left: open the pocket and push the corner in between its layers.",
+      "fold": {
+        "id": "lock-left",
+        "bring": "at:0,0.9",
+        "to": "at:0.235294,0.7",
+        "reverse": "inside"
+      }
+    },
+    {
+      "title": "Crease the top corners",
+      "text": "Fold each top corner down to the center crease, so the top edge lies along it. Crease well and open them again.",
+      "folds": [
+        {
+          "id": "diag-left",
+          "bring": "at:0.235294,0.775",
+          "to": "crease:center",
+          "through": "at:0.5,0.775",
+          "unfold": true
+        },
+        {
+          "id": "diag-right",
+          "bring": "at:0.764706,0.775",
+          "to": "crease:center",
+          "through": "at:0.5,0.775",
+          "unfold": true
+        }
+      ]
+    },
+    {
+      "title": "Fold the sides in",
+      "text": "Fold each straight side edge in so it lands on the diagonal crease you just made. The fold starts where that crease meets the side.",
+      "folds": [
+        {
+          "id": "edge-left",
+          "bring": "at:0,0.575",
+          "to": "crease:diag-left",
+          "through": "at:0,0.35"
+        },
+        {
+          "id": "edge-right",
+          "bring": "at:1,0.575",
+          "to": "crease:diag-right",
+          "through": "at:1,0.35"
+        }
+      ]
+    },
+    {
+      "title": "Fold the right side in",
+      "text": "Fold the right side in along its diagonal crease. As it goes over, tuck the small flap at the top under the folded-down section in the middle; this locks the layers together.",
+      "fold": {
+        "id": "side-right",
+        "along": "crease:diag-right",
+        "move": "at:0.741084,0.629921"
+      }
+    },
+    {
+      "title": "Fold the left side in",
+      "text": "Same on the left: fold along the diagonal crease and tuck the small top flap under the middle section.",
+      "fold": {
+        "id": "side-left",
+        "along": "crease:diag-left",
+        "move": "at:0.258916,0.629921"
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the paper so the folds face down.",
+      "flip": true
+    },
+    {
+      "title": "Fold in half",
+      "text": "Fold it in half along the center crease, so the folds end up on the outside.",
+      "fold": {
+        "along": "crease:center",
+        "move": "corner:bottom-right"
+      }
+    },
+    {
+      "title": "Fold the first wing",
+      "text": "Fold the top layer down along a line 2.5 cm (1 in) from the bottom fold, parallel to it.",
+      "fold": {
+        "id": "wing-1",
+        "parallel": "crease:center",
+        "distance": 2.54,
+        "move": "at:0.85,0.1",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the plane so the other side faces up.",
+      "flip": true
+    },
+    {
+      "title": "Fold the second wing",
+      "text": "Same fold on this side: 2.5 cm (1 in) from the bottom fold, parallel to it, so the wings line up.",
+      "fold": {
+        "id": "wing-2",
+        "parallel": "crease:center",
+        "distance": 2.54,
+        "move": "at:0.1352,0.0787",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Fold the first fin",
+      "text": "Fold the outer edge of the top wing up to make a fin about 1.5 cm wide. Keep the crease parallel to the wing's long folded edge.",
+      "fold": {
+        "id": "fin-1",
+        "parallel": "crease:wing-2",
+        "distance": 6.755,
+        "move": "corner:bottom-left",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Flip the plane so the other wing faces up.",
+      "flip": true
+    },
+    {
+      "title": "Fold the second fin",
+      "text": "Fold a matching fin on this wing, the same width as the first.",
+      "fold": {
+        "id": "fin-2",
+        "parallel": "crease:wing-1",
+        "distance": 6.755,
+        "move": "corner:bottom-right",
+        "layers": "top"
+      }
+    },
+    {
+      "title": "Cut the elevators",
+      "text": "Hold the wings together, edges lined up. Cut two slits 1.5 cm (½ in) deep into the back edge, 2 cm apart, between the fins and the body. Both wings get the same cuts.",
+      "cut": {
+        "slits": [
+          [
+            "at:0.844372,0",
+            "at:0.844372,0.059055"
+          ],
+          [
+            "at:0.751737,0",
+            "at:0.751737,0.059055"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "Open the wings",
+      "text": "Lift both wings until they're level, angled slightly up, and stand the fins upright.",
+      "pose": {
+        "type": "flight",
+        "spine": "crease:wing-2",
+        "keel": "crease:center",
+        "wings": [
+          "wing-1",
+          "wing-2"
+        ],
+        "dihedral": 5,
+        "fins": [
+          "fin-1",
+          "fin-2"
+        ],
+        "nose": "at:0.5,0.775"
+      }
+    }
+  ],
+  "done": {
+    "title": "Ready to glide",
+    "text": "Hold it under the wings and launch it gently and level. If the nose dives, bend the elevator tabs up a little; if it climbs and stalls, bend them down."
+  }
+}

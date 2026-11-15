@@ -16,6 +16,8 @@ export interface RefContext {
   H: number;
   /** Flat segments of every crease made so far, by id. */
   creases: Map<string, [Vec2, Vec2][]>;
+  /** Flat segments where the paper has been cut, so it no longer connects across them. */
+  cuts?: [Vec2, Vec2][];
 }
 
 export type Resolved =
@@ -67,28 +69,38 @@ function splitRef(ref: string): [string, string] {
 
 const lenXZ = (a: Vector3, b: Vector3) => Math.hypot(a.x - b.x, a.z - b.z);
 
+/** The spot on the flat sheet a point reference names (before any folding moves it). */
+export function flatPoint(ref: string, ctx: RefContext): Vec2 {
+  const [kind, name] = splitRef(ref);
+  if (kind === 'corner') {
+    const c = CORNERS[name];
+    if (!c) throw new RefError(`Unknown corner "${name}". Use top-left, top-right, bottom-left or bottom-right.`);
+    return c(ctx.W, ctx.H);
+  }
+  if (kind === 'at') {
+    const [fx, fy] = name.split(',').map(Number);
+    if (!Number.isFinite(fx) || !Number.isFinite(fy)) throw new RefError(`"${ref}" needs two numbers, like at:0.5,1.`);
+    return [fx * ctx.W, fy * ctx.H];
+  }
+  if (kind === 'mid') {
+    const segs = flatSegments(name, ctx);
+    let best = segs[0], bestLen = -1;
+    for (const s of segs) {
+      const l = Math.hypot(s[1][0] - s[0][0], s[1][1] - s[0][1]);
+      if (l > bestLen) { bestLen = l; best = s; }
+    }
+    return [(best[0][0] + best[1][0]) / 2, (best[0][1] + best[1][1]) / 2];
+  }
+  throw new RefError(`"${ref}" is a line, but a point is needed here (corner:…, mid:…, or at:x,y).`);
+}
+
 export function resolve(ref: string, faces: Face[], ctx: RefContext): Resolved {
   const [kind, name] = splitRef(ref);
   switch (kind) {
-    case 'corner': {
-      const c = CORNERS[name];
-      if (!c) throw new RefError(`Unknown corner "${name}". Use top-left, top-right, bottom-left or bottom-right.`);
-      return { kind: 'point', p: flatToWorld(c(ctx.W, ctx.H), faces) };
-    }
-    case 'at': {
-      const [fx, fy] = name.split(',').map(Number);
-      if (!Number.isFinite(fx) || !Number.isFinite(fy)) throw new RefError(`"${ref}" needs two numbers, like at:0.5,1.`);
-      return { kind: 'point', p: flatToWorld([fx * ctx.W, fy * ctx.H], faces) };
-    }
-    case 'mid': {
-      const segs = flatSegments(name, ctx);
-      let best = segs[0], bestLen = -1;
-      for (const s of segs) {
-        const l = Math.hypot(s[1][0] - s[0][0], s[1][1] - s[0][1]);
-        if (l > bestLen) { bestLen = l; best = s; }
-      }
-      return { kind: 'point', p: flatToWorld([(best[0][0] + best[1][0]) / 2, (best[0][1] + best[1][1]) / 2], faces) };
-    }
+    case 'corner':
+    case 'at':
+    case 'mid':
+      return { kind: 'point', p: flatToWorld(flatPoint(ref, ctx), faces) };
     case 'edge':
     case 'crease': {
       // A crease can span several layers; use its longest piece as it lies right now.

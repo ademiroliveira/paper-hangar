@@ -1,6 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
-import { EPS, Face, components, flatToLocal, overlapsFromAbove, splitFace } from './geometry';
-import { RefError, resolve, type RefContext, type Resolved } from './refs';
+import { EPS, Face, components, flatContains, flatToLocal, overlapsFromAbove, sharedSegments, splitFace } from './geometry';
+import { RefError, flatPoint, resolve, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
 import { auditStep, type AuditIssue } from './audit';
@@ -17,10 +17,16 @@ export const thereAndBack: Profile = t => (t < 0.55 ? t / 0.55 : Math.max(0, (1 
 const smooth = (x: number) => x * x * (3 - 2 * x);
 export const range = (a: number, b: number): Profile => t => smooth(Math.min(1, Math.max(0, (t - a) / (b - a))));
 
-/** One rigid motion inside a step: rotate some faces about an axis, optionally translate. */
+/**
+ * One rigid motion inside a step: rotate some faces about an axis, optionally translate.
+ * `reverse` ops turn one layer of a pocket inside out;
+ * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut.
+ */
 export interface Op {
-  kind: 'fold' | 'flip' | 'pose';
+  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'lift' | 'cut';
   id?: string;
+  /** Ops that move one piece of paper together (the layers of a reverse fold). Seams between them may open mid-motion. */
+  group?: string;
   pivot: Vector3;
   axis: Vector3;
   angle: number;
@@ -62,6 +68,8 @@ export interface CompiledPlane {
   creases: CreaseRecord[];
   /** How high the finished plane floats above the table in the flight pose (cm). */
   flyHeight: number;
+  /** Flat segments where the paper has been cut. */
+  cuts: [Vec2, Vec2][];
   steps: Step[];
   done: { title: string; text: string };
 }
@@ -235,7 +243,8 @@ function land(ops: Op[], faces: Face[]) {
 function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[], ops: Op[]): Step {
   const step: Step = {
     index, title: spec.title, text: spec.text ?? '', view, faces, ops,
-    movingAny: faces.map((_, i) => ops.some(op => op.moving[i])),
+    // Lifting the whole model out of the way isn't part of the fold; don't highlight it.
+    movingAny: faces.map((_, i) => ops.some(op => op.kind !== 'lift' && op.moving[i])),
     end: [],
   };
   const mats = stepMatrices(step, 1);
@@ -249,6 +258,68 @@ function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[]
 
 /* ---------- step kinds ---------- */
 
+/** Paper lying above or between layers that lift has to lift too, even when it only connects to them on the other side of the fold (e.g. a corner flap tucked inside a wing). */
+function growTrapped(chosen: Set<Face>, comps: Face[][]) {
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const c of comps) {
+      if (c.some(x => chosen.has(x))) continue;
+      const trapped = c.some(x => [...chosen].some(g => x.maxY() > g.maxY() + GAP / 2 && overlapsFromAbove(x, g)));
+      if (trapped) { c.forEach(x => chosen.add(x)); grew = true; }
+    }
+  }
+}
+
+const layerKey = (y: number) => Math.round(y / (GAP / 8));
+
+/**
+ * Inside reverse fold: the chosen paper is a pocket. Its upper half turns down and its lower half
+ * turns up, both about the fold line, so the point ends up inside the pocket, between its two sides.
+ * Each layer gets its own op so the layers nest in order. Returns the ops (not yet pushed).
+ */
+function reverseOps(line: Line, id: string, chosen: Face[], faces: Face[]): { ops: Op[]; layerOf: Map<Face, number> } {
+  const levels = [...new Set(chosen.map(f => layerKey(f.maxY())))].sort((a, b) => a - b);
+  if (levels.length < 2 || levels.length % 2) {
+    throw new RefError(`An inside reverse fold needs a pocket: the same number of layers on each side. The paper here has ${levels.length} layer${levels.length === 1 ? '' : 's'}.`);
+  }
+  const k = levels.length / 2;
+  const heightOf = (lv: number) => Math.max(...chosen.filter(f => layerKey(f.maxY()) === lv).map(f => f.maxY()));
+  const lo = heightOf(levels[k - 1]), hi = heightOf(levels[k]);
+  const lower = chosen.filter(f => layerKey(f.maxY()) <= levels[k - 1]), upper = chosen.filter(f => layerKey(f.maxY()) >= levels[k]);
+  if (!lower.some(a => upper.some(b => sharedSegments(a, b).length))) {
+    throw new RefError('An inside reverse fold needs a pocket: the layers on the moving side have to be joined along a fold. These aren\'t.');
+  }
+  const delta = (hi - lo) / (levels.length + 1);
+  const ops: Op[] = [];
+  const layerOf = new Map<Face, number>();
+  levels.forEach((lv, j) => {
+    const y = heightOf(lv);
+    const isUpper = j >= k;
+    // Lower half: its top layer lands just above the pocket floor; upper half: its bottom layer just under the roof.
+    const target = isUpper ? hi - (j - k + 1) * delta : lo + (k - j) * delta;
+    const { op } = makeOp(line, { kind: 'reverse', id, angle: 180, h: (y + target) / 2, lift: isUpper ? DOWN : UP });
+    op.group = id;
+    op.arrow = j === k - 1;
+    op.tr = new Vector3(0, 0, 0);
+    ops.push(op);
+    for (const f of chosen) if (layerKey(f.maxY()) === lv) layerOf.set(f, ops.length - 1);
+  });
+  // Nothing else may lie inside the pocket where the point turns in.
+  const M = new Matrix4();
+  for (const st of faces) {
+    if (chosen.includes(st)) continue;
+    const h = st.maxY();
+    if (h <= lo + GAP / 8 || h >= hi - GAP / 8) continue;
+    for (const f of chosen) {
+      M.copy(f.M).premultiply(opMatrix(ops[layerOf.get(f)!], 1));
+      if (overlapsFromAbove(new Face(f.poly, M), st)) {
+        throw new RefError(`The point would turn in through paper lying inside the pocket, near (${st.centroidFlat().map(v => v.toFixed(1)).join(', ')}) cm on the flat sheet.`);
+      }
+    }
+  }
+  return { ops, layerOf };
+}
+
 function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefContext): Step {
   const folds = spec.folds ?? [spec.fold!];
   const lines = folds.map(f => solveFold(f, start, ctx));
@@ -257,6 +328,7 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
 
   folds.forEach((f, k) => {
     const id = f.id ?? (folds.length > 1 ? `s${index + 1}-${k + 1}` : `s${index + 1}`);
+    if (f.reverse && f.unfold) throw new RefError('A reverse fold can\'t be unfolded in the same step.');
     const { op, n, onSide } = makeOp(lines[k], {
       kind: 'fold', id, angle: f.unfold ? 175 : 180, prof: f.unfold ? thereAndBack : linear,
     });
@@ -264,24 +336,22 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     const split = faces.flatMap(fc => splitFace(fc, op.pivot, n));
     const moving = split.filter(onSide);
     let chosen = new Set(moving);
-    if (f.layers === 'top' && moving.length) {
-      const comps = components(moving);
+    if (f.flap && moving.length) {
+      const fp = flatPoint(f.flap, ctx);
+      const comps = components(moving, ctx.cuts);
+      const hit = comps.filter(c => c.some(x => flatContains(x, fp)));
+      if (!hit.length) throw new RefError(`"${f.flap}" isn't on the paper this fold moves. Point "flap" at the flap you want to fold.`);
+      chosen = new Set(hit.flat());
+      growTrapped(chosen, comps);
+    } else if (f.layers === 'top' && moving.length) {
+      const comps = components(moving, ctx.cuts);
       let best: Face[] = [], bestH = -Infinity;
       for (const c of comps) {
         const h = Math.max(...c.map(x => x.maxY()));
         if (h > bestH) { bestH = h; best = c; }
       }
       chosen = new Set(best);
-      // Paper lying above or between layers that lift has to lift too, even when it only connects
-      // to them on the other side of the fold (e.g. a corner flap tucked inside a wing).
-      for (let grew = true; grew; ) {
-        grew = false;
-        for (const c of comps) {
-          if (c.some(x => chosen.has(x))) continue;
-          const trapped = c.some(x => [...chosen].some(g => x.maxY() > g.maxY() + GAP / 2 && overlapsFromAbove(x, g)));
-          if (trapped) { c.forEach(x => chosen.add(x)); grew = true; }
-        }
-      }
+      growTrapped(chosen, comps);
     }
     if (!chosen.size) throw new RefError(`Fold ${k + 1} doesn't move any paper. The fold line misses the sheet; check "${f.bring ?? f.along ?? f.parallel}".`);
     if (chosen.size === split.length && k === 0 && folds.length === 1) {
@@ -300,7 +370,15 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
       if (parts.length > 1 && !parts.some(p => chosen.has(p))) faces.push(parent);
       else faces.push(...parts);
     }
-    for (const fc of faces) if (chosen.has(fc)) fc.ops.add(k);
+
+    let myOps: Op[] = [op];
+    if (f.reverse === 'inside') {
+      const r = reverseOps(lines[k], id, faces.filter(fc => chosen.has(fc)), faces);
+      myOps = r.ops;
+      for (const [fc, j] of r.layerOf) fc.ops.add(ops.length + j);
+    } else {
+      for (const fc of faces) if (chosen.has(fc)) fc.ops.add(ops.length);
+    }
 
     // Record the new crease (the hinge edges of what moved) so later steps can refer to it.
     const segs: [Vec2, Vec2][] = [];
@@ -321,13 +399,87 @@ function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefCont
     }
     ctx.creases.set(id, segs);
     if (segs.length) {
-      op.crease = [op.pivot.clone().addScaledVector(op.axis, tMin), op.pivot.clone().addScaledVector(op.axis, tMax)];
+      const c: [Vector3, Vector3] = [op.pivot.clone().addScaledVector(op.axis, tMin), op.pivot.clone().addScaledVector(op.axis, tMax)];
+      for (const o of myOps) o.crease = o.arrow ? c : null;
+      if (!myOps.some(o => o.crease)) myOps[0].crease = c;
     }
-    ops.push(op);
+    ops.push(...myOps);
   });
 
   ops.forEach((op, k) => { op.moving = faces.map(fc => fc.ops.has(k)); });
-  land(ops, faces);
+  land(ops.filter(op => op.kind === 'fold'), faces);
+
+  // A reverse fold swings layers down into the pocket; lift the model while it does, so nothing dips into the table.
+  const rev = ops.filter(op => op.kind === 'reverse');
+  if (rev.length) {
+    let reach = 0;
+    for (const op of rev) faces.forEach((fc, i) => {
+      if (!op.moving[i]) return;
+      for (const v of fc.world()) reach = Math.max(reach, v.clone().sub(op.pivot).setY(0).cross(op.axis).length());
+    });
+    ops.push({
+      kind: 'lift', pivot: new Vector3(), axis: UP.clone(), angle: 0, tr: null, lift: UP, prof: linear,
+      moving: faces.map(() => true), crease: null, arrow: false, arrowEnd: 1, hop: reach + 0.5,
+    });
+  }
+
+  return finish(index, spec, 'table', faces, ops);
+}
+
+/** Cut slits through every layer. The paper stays where it is; it just stops being joined along each slit. */
+function compileCut(spec: StepSpec, index: number, start: Face[], ctx: RefContext): Step {
+  let faces = start.map(f => new Face(f.poly, f.M, f.tags));
+  const ops: Op[] = [];
+  const top = Math.max(...faces.map(f => f.maxY()));
+  ctx.cuts ??= [];
+  for (const [ra, rb] of spec.cut!.slits) {
+    const A = xz(pointOf(resolve(ra, faces, ctx))), B = xz(pointOf(resolve(rb, faces, ctx)));
+    const L = A.distanceTo(B);
+    if (L < 1e-3) throw new RefError(`The slit from "${ra}" to "${rb}" has no length.`);
+    const dir = B.clone().sub(A).normalize(), n = new Vector3(-dir.z, 0, dir.x);
+    let made = 0;
+    const next: Face[] = [];
+    for (const f of faces) {
+      const w = f.world();
+      const d = w.map(v => v.clone().sub(A).dot(n));
+      if (!(d.some(x => x > EPS) && d.some(x => x < -EPS))) { next.push(f); continue; }
+      // Where the slit's line crosses this piece.
+      const ts: number[] = [];
+      for (let i = 0; i < w.length; i++) {
+        const j = (i + 1) % w.length;
+        if ((d[i] > EPS && d[j] < -EPS) || (d[i] < -EPS && d[j] > EPS)) {
+          const p = w[i].clone().lerp(w[j], d[i] / (d[i] - d[j]));
+          ts.push(p.clone().sub(A).dot(dir));
+        } else if (Math.abs(d[i]) <= EPS) ts.push(w[i].clone().sub(A).dot(dir));
+      }
+      const t0 = Math.max(0, Math.min(...ts)), t1 = Math.min(L, Math.max(...ts));
+      if (t1 - t0 < 1e-4) { next.push(f); continue; }
+      // A slit that ends inside a piece: first split across it at the end, so every piece stays convex.
+      let parts = [f];
+      for (const [t, sgn] of [[t0, -1], [t1, 1]] as const) {
+        if (t <= Math.min(...ts) + 1e-4 || t >= Math.max(...ts) - 1e-4) continue;
+        const P = A.clone().addScaledVector(dir, t);
+        parts = parts.flatMap(p => splitFace(p, P, dir.clone().multiplyScalar(sgn)));
+      }
+      parts = parts.flatMap(p => {
+        const c = p.centroidWorld().sub(A).dot(dir);
+        return c > t0 && c < t1 ? splitFace(p, A, n) : [p];
+      });
+      for (const p of parts) { p.splitFrom = undefined; next.push(p); }
+      const inv = f.M.clone().invert();
+      const flat = (t: number): Vec2 => { const v = A.clone().addScaledVector(dir, t).setY(w[0].y).applyMatrix4(inv); return [v.x, -v.z]; };
+      ctx.cuts.push([flat(t0), flat(t1)]);
+      made++;
+    }
+    if (!made) throw new RefError(`The slit from "${ra}" to "${rb}" doesn't cross any paper.`);
+    faces = next;
+    const mark: Op = {
+      kind: 'cut', pivot: A.clone(), axis: dir.clone(), angle: 0, tr: null, lift: UP, prof: linear,
+      moving: [], crease: [A.clone().setY(top), B.clone().setY(top)], arrow: false, arrowEnd: 1,
+    };
+    ops.push(mark);
+  }
+  ops.forEach(op => { op.moving = faces.map(() => false); });
   return finish(index, spec, 'table', faces, ops);
 }
 
@@ -387,6 +539,25 @@ function compilePose(spec: StepSpec, index: number, start: Face[], ctx: RefConte
   const flyH = plane.flyHeight;
   const wingProf = range(0.5, 1), standProf = range(0.2, 0.62), liftProf = range(0, 0.4);
   const ops: Op[] = [];
+  // Fins open first, in the table frame, so the wing turns carry them along.
+  for (const id of pose.fins ?? []) {
+    const mine = faces.map(f => f.tags.has(`moved:${id}`));
+    if (!mine.some(Boolean)) throw new RefError(`No paper was moved by a fold with id "${id}", so there's no fin to open.`);
+    const L = resolve(`crease:${id}`, faces, ctx);
+    if (L.kind !== 'line') throw new RefError(`"crease:${id}" isn't a line.`);
+    const fin = faces.filter((_, i) => mine[i]);
+    const nb = faces.filter((f, i) => !mine[i] && fin.some(g => sharedSegments(f, g, ctx.cuts).length));
+    const avgY = (fs: Face[]) => fs.reduce((s, f) => s + f.centroidWorld().y, 0) / Math.max(1, fs.length);
+    const finY = avgY(fin), nbY = nb.length ? avgY(nb) : finY - 1;
+    const c = new Vector3();
+    fin.forEach(f => c.add(f.centroidWorld()));
+    c.multiplyScalar(1 / fin.length);
+    const { op } = makeOp({ a: L.a, b: L.b, mover: c }, {
+      kind: 'pose', angle: pose.finAngle ?? 90, prof: range(0.6, 1), h: (finY + nbY) / 2, lift: finY > nbY ? UP : DOWN,
+    });
+    op.moving = mine;
+    ops.push(op);
+  }
   for (const id of pose.wings) {
     const mine = faces.map(f => wingOf(f) === id);
     const ys = faces.filter((_, i) => mine[i]).flatMap(f => f.world().map(v => v.y));
@@ -429,10 +600,10 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
   const stopAt = first ? (first.step ?? 0) : spec.steps.length;
   const { W, H } = first?.step == null && first ? { W: 21, H: 29.7 } : paperSize(spec.paper);
   const plane: CompiledPlane = {
-    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps,
+    spec, width: W, height: H, creases: [], flyHeight: H / 3, steps, cuts: [],
     done: spec.done ?? { title: 'Ready to fly', text: 'Hold it just behind the nose and throw gently, straight ahead.' },
   };
-  const ctx: RefContext = { W, H, creases: new Map() };
+  const ctx: RefContext = { W, H, creases: new Map(), cuts: plane.cuts };
   let faces = [new Face([[0, 0], [W, 0], [W, H], [0, H]])];
   for (let i = 0; i < stopAt; i++) {
     const s = spec.steps[i];
@@ -440,6 +611,7 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
     try {
       const st = s.pose ? compilePose(s, i, faces, ctx, W, H, plane)
         : s.flip ? compileFlip(s, i, faces)
+        : s.cut ? compileCut(s, i, faces, ctx)
         : compileFolds(s, i, faces, ctx);
       // Physical checks: refuse anything a real sheet of paper couldn't do.
       const issues = auditStep(plane, st);
