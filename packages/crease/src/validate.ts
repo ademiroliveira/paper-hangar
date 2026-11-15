@@ -50,6 +50,11 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
       const line = f.line !== undefined && f.move !== undefined;
       if (!bringTo && !alongMove && !parallel && !line) say(`${label}use "bring" + "to", "along" + "move", "parallel" + "distance" + "move", or "line" + "move".`);
       if (f.reverse !== undefined && f.reverse !== 'inside') say(`${label}"reverse" can only be "inside" for now.`);
+      if (f.tuck !== undefined) {
+        if (!f.tuck.flap || !isRef(f.tuck.flap)) say(`${label}"tuck.flap" must be a point on the flap that tucks in, like at:0.95,0.95.`);
+        if (!f.tuck.under || !ids.has(f.tuck.under)) say(`${label}"tuck.under" must be the id of an earlier fold.`);
+        if (f.swivel || f.reverse || f.unfold) say(`${label}a tuck goes with a plain fold, not a swivel, reverse fold or unfold.`);
+      }
       if (f.swivel !== undefined) {
         if (f.swivel !== true) say(`${label}"swivel" is either true or left out.`);
         else if (!f.flap) say(`${label}a swivel needs "flap": a point on the layer that folds over.`);

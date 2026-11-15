@@ -17,7 +17,7 @@
     "Step 6: the fold line is 2.5 cm (1 in) below the top edge of the outward-folded flaps, as the diagram marks it.",
     "Steps 7–8: folded as the book's swivel fold. The band folds over the V's edge, its end turns back down over the V's corner, and the layer under it folds its corner in along the first corner crease. Book diagrams 8d and 10 show these details: the vertical edge, the strip's bottom at about 7 in, and a white tip under the strip.",
     "Step 10: \"the outer edges\" are read as the sheet's straight side edges, folded onto the diagonal creases. This matches the steep sides in the book's next diagram.",
-    "Steps 11–12: the app folds each side along its diagonal crease but doesn't show the small flap being tucked under the middle section. The photos don't make clear which flap it is. The step text keeps the book's instruction.",
+    "Steps 11–12: the flap you tuck is read as the end of the band from steps 7–8 (the strip and the white tip under it). The photos don't label it, but it's the flap that lands on the middle section, with its fold right along that section's lower edge, so it slides in there.",
     "Steps 15 and 17: the wings fold on a line from the nose tip to 2.5 cm (1 in) from the bottom fold at the back. The book marks 1 in at the back; the pointed nose and slanted back edge in its diagram 19 fit a line from the tip.",
     "Steps 18 and 20: the fins are about 1.3 cm wide at the back, widening to about 2.5 cm at the front, with the crease parallel to the wing's fold. The book shows the line but no measurement.",
     "Steps 21–22: two 1.5 cm slits, 1.8 cm apart, cut square to the back edge between the fin and the body, with the tab bent up 20° in flight as in the book's photo. The book gives no measurements."
@@ -172,20 +172,28 @@
     },
     {
       "title": "Fold the right side in",
-      "text": "Fold the right side in along its diagonal crease. As it goes over, tuck the small flap at the top under the folded-down section in the middle; this locks the layers together.",
+      "text": "Fold the right side in along its diagonal crease. As it goes over, tuck the small flap at the top (the end of the band you swivelled in step 7) under the lower edge of the folded-down section in the middle. This locks the layers together.",
       "fold": {
         "id": "side-right",
         "along": "crease:diag-right",
-        "move": "at:0.741084,0.629921"
+        "move": "at:0.741084,0.629921",
+        "tuck": {
+          "flap": "at:0.8728,0.9665",
+          "under": "top"
+        }
       }
     },
     {
       "title": "Fold the left side in",
-      "text": "Same on the left: fold along the diagonal crease and tuck the small top flap under the middle section.",
+      "text": "Same on the left: fold along the diagonal crease and tuck the end of the left band under the middle section.",
       "fold": {
         "id": "side-left",
         "along": "crease:diag-left",
-        "move": "at:0.258916,0.629921"
+        "move": "at:0.258916,0.629921",
+        "tuck": {
+          "flap": "at:0.1272,0.9665",
+          "under": "top"
+        }
       }
     },
     {

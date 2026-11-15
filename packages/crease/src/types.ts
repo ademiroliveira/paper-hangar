@@ -50,6 +50,15 @@ export interface FoldSpec {
    * layer under it folds its corner in. Found automatically: the line where the flap is joined to that layer.
    */
   swivel?: boolean;
+  /** While folding, slide the flap that lands on paper from an earlier fold under that paper instead (a lock). */
+  tuck?: TuckSpec;
+}
+
+export interface TuckSpec {
+  /** A point on the flap that tucks in. Only the part of it that lands on `under`'s paper goes beneath. */
+  flap: string;
+  /** Id of the earlier fold whose paper the flap slides under. */
+  under: string;
 }
 
 /** Cut through every layer along a straight line, from one point to the other. */
