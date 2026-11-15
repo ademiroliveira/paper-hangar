@@ -2,8 +2,8 @@
   "$schema": "../packages/crease/plane.schema.json",
   "id": "valkyrie",
   "name": "Valkyrie",
-  "summary": "Big wings, wingtip fins and layers locked at the nose. It floats slowly and stays up a long time.",
-  "difficulty": 3,
+  "summary": "Broad swept wings with wingtip fins and elevators. It floats slowly and stays up a long time.",
+  "difficulty": 2,
   "paper": {
     "width": 21.59,
     "height": 25.4
@@ -217,7 +217,7 @@
     },
     {
       "title": "Fold the first fin",
-      "text": "Fold the outer edge of the top wing up to make a fin, about 1.5 cm wide at the back and a little wider at the front. Keep the crease parallel to the wing's long folded edge.",
+      "text": "Fold the outer edge of the top wing up to make a fin, about 1.3 cm wide at the back and widening to about 2.5 cm at the front. Keep the crease parallel to the wing's long folded edge.",
       "fold": {
         "id": "fin-1",
         "parallel": "crease:wing-2",
@@ -244,7 +244,7 @@
     },
     {
       "title": "Cut the elevators",
-      "text": "Hold the wings together, edges lined up. Cut two slits 1.5 cm (½ in) straight into the back edge, about 1.8 cm apart, between the fins and the body. Both wings get the same cuts.",
+      "text": "Hold the wings together, edges lined up. Cut two slits 1.5 cm (about ⅝ in) straight into the back edge, about 1.8 cm apart, between the fins and the body. Both wings get the same cuts.",
       "cut": {
         "slits": [
           [
