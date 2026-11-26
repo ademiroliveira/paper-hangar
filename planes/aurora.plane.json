@@ -1,0 +1,79 @@
+{
+  "$schema": "../packages/crease/plane.schema.json",
+  "id": "aurora",
+  "name": "Aurora",
+  "summary": "Work in progress: a sleek locked dart with winglets. For now it folds up to the nose; the rest arrives as the app learns its folds.",
+  "difficulty": 3,
+  "paper": "A4",
+  "author": "Kyle Boyer",
+  "sources": [
+    {
+      "title": "Written fold sequence from the requester",
+      "note": "Folding order and measurements for every step (Phase 1 to Phase 4)"
+    },
+    {
+      "title": "Aurora Template, Foldable Flight on Patreon",
+      "url": "https://www.patreon.com/FoldableFlight/posts/aurora-template-67616435",
+      "note": "Identifies the plane and designer; the post itself is patron-only and was not read"
+    }
+  ],
+  "assumptions": [
+    "Paper is A4. The written sequence doesn't name a size.",
+    "Step 2: the three pinches only locate a line 1/8 of the sheet down from the top edge (3.7 cm on A4). The recipe folds that line directly; the step text keeps the pinch method.",
+    "Step 3: the bottom pinch sits on the centre line, 1/4 of the sheet up from the bottom edge. It is only used as a point, so it is written as at:0.5,0.25.",
+    "Step 3: the source creases one diagonal on one half, then transfers it to the other half by folding along the centre. The recipe folds in half first and creases both halves at once, which gives the same two half-length diagonals."
+  ],
+  "steps": [
+    {
+      "title": "Crease the middle",
+      "text": "Fold the sheet in half the long way, press a sharp crease, then open it flat.",
+      "fold": {
+        "id": "center",
+        "bring": "edge:left",
+        "to": "edge:right",
+        "unfold": true
+      }
+    },
+    {
+      "title": "Crease the top reference line",
+      "text": "Pinch the middle of the sheet by folding top edge to bottom edge. Pinch again with the top edge on that mark, then fold the top edge to the new pinch and crease right across. Open it flat.",
+      "fold": {
+        "id": "top-ref",
+        "parallel": "edge:top",
+        "distance": 3.7125,
+        "move": "at:0.5,0.97",
+        "unfold": true
+      }
+    },
+    {
+      "title": "Turn it over",
+      "text": "Pinch a mark on the centre line by bringing the bottom edge up to the middle pinch. Then turn the sheet over.",
+      "flip": true
+    },
+    {
+      "title": "Fold in half",
+      "text": "Fold the sheet in half along the centre crease.",
+      "fold": {
+        "along": "crease:center",
+        "move": "corner:bottom-left"
+      }
+    },
+    {
+      "title": "Crease the two diagonals",
+      "text": "Through both layers, fold from the bottom pinch on the folded edge up to where the top reference line meets the open edges. Crease firmly, then open the fold.",
+      "fold": {
+        "id": "diagonal",
+        "line": [
+          "at:0.5,0.25",
+          "at:1,0.875"
+        ],
+        "move": "corner:top-right",
+        "unfold": true
+      }
+    }
+  ],
+  "done": {
+    "title": "To be continued",
+    "text": "That's as far as the app can fold the Aurora today. Next comes the nose squash fold, then the reinforced leading edges, the centre lock and the winglets."
+  }
+}
