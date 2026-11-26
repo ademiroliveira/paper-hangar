@@ -144,7 +144,7 @@
         "to": {
           "type": "string",
           "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
-          "description": "Where it lands: a point or a line."
+          "description": "Where it lands: a point or a line. With squash: where the flap's folded edge lands (a line through where it meets the hinge, or a point)."
         },
         "through": {
           "type": "string",
@@ -203,6 +203,11 @@
             "inside"
           ],
           "description": "inside: an inside reverse fold. The moving paper is a pocket; its point turns in between the pocket's two sides."
+        },
+        "squash": {
+          "type": "string",
+          "pattern": "^(corner:(top|bottom)-(left|right)|edge:(top|bottom|left|right)|crease:[a-z0-9-]+|mid:(edge:(top|bottom|left|right)|crease:[a-z0-9-]+)|at:-?[0-9.]+,-?[0-9.]+)$",
+          "description": "Squash fold: the line a two-layer flap is hinged on. The flap stands up, opens and is pressed flat so its folded edge lands on \"to\". Makes crease:<id> (layers that stay) and crease:<id>-2 (layers that turn over)."
         }
       },
       "oneOf": [
@@ -210,7 +215,12 @@
           "required": [
             "bring",
             "to"
-          ]
+          ],
+          "not": {
+            "required": [
+              "squash"
+            ]
+          }
         },
         {
           "required": [
@@ -229,6 +239,12 @@
           "required": [
             "line",
             "move"
+          ]
+        },
+        {
+          "required": [
+            "squash",
+            "to"
           ]
         }
       ]

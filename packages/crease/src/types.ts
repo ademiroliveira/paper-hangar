@@ -16,7 +16,7 @@ export interface FoldSpec {
   id?: string;
   /** The point or line that moves. */
   bring?: string;
-  /** Where it lands: a point or a line. */
+  /** Where it lands: a point or a line. With `squash`: where the flap's spine lands. */
   to?: string;
   /** A point the fold must pass through (needed when bringing a point onto a line). */
   through?: string;
@@ -44,6 +44,14 @@ export interface FoldSpec {
    * a fold); its point turns inside out and ends up between the pocket's two sides.
    */
   reverse?: 'inside';
+  /**
+   * Squash fold: the line a two-layer flap is hinged on. The flap stands up, opens, and is pressed
+   * flat so its folded edge (the spine) lands on `to`. Its lower layers stay on their side of the hinge,
+   * its upper layers turn over to the other side, and each gets a new crease. Use `flap` to say which
+   * flap when more than one is hinged there. Makes `crease:<id>` (in the layers that stay) and
+   * `crease:<id>-2` (in the layers that turn over).
+   */
+  squash?: string;
 }
 
 /** Cut through every layer along a straight line, from one point to the other. */

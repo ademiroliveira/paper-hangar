@@ -37,7 +37,7 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
     const folds: FoldSpec[] = s.folds ?? (s.fold ? [s.fold] : []);
     folds.forEach((f, k) => {
       const label = folds.length > 1 ? `Fold ${k + 1}: ` : '';
-      const refs = (['bring', 'to', 'through', 'along', 'move', 'parallel', 'flap'] as const).filter(key => f[key] !== undefined);
+      const refs = (['bring', 'to', 'through', 'along', 'move', 'parallel', 'flap', 'squash'] as const).filter(key => f[key] !== undefined);
       for (const key of refs) if (!isRef(f[key]!)) say(`${label}"${f[key]}" in "${key}" isn't a reference I know. Try corner:top-left, edge:left, crease:<id>, mid:edge:top or at:0.5,1.`);
       if (f.line !== undefined) {
         if (!Array.isArray(f.line) || f.line.length !== 2) say(`${label}"line" must be two points: ["<point>", "<point>"].`);
@@ -47,11 +47,21 @@ export function validatePlane(spec: PlaneSpec): Problem[] {
       const alongMove = f.along !== undefined && f.move !== undefined;
       const parallel = f.parallel !== undefined && f.move !== undefined && typeof f.distance === 'number';
       const line = f.line !== undefined && f.move !== undefined;
-      if (!bringTo && !alongMove && !parallel && !line) say(`${label}use "bring" + "to", "along" + "move", "parallel" + "distance" + "move", or "line" + "move".`);
+      const squash = f.squash !== undefined;
+      if (squash) {
+        if (f.to === undefined) say(`${label}a squash fold needs "to": the line or point the flap's folded edge lands on.`);
+        if (f.bring !== undefined || f.along !== undefined || f.parallel !== undefined || f.line !== undefined) say(`${label}a squash fold takes "squash" (the hinge) and "to", not "bring", "along", "parallel" or "line".`);
+        if (f.reverse !== undefined || f.unfold) say(`${label}a squash fold can't also be a reverse fold or be unfolded.`);
+        if (folds.length > 1) say('A squash fold has to be a step of its own.');
+      } else if (!bringTo && !alongMove && !parallel && !line) say(`${label}use "bring" + "to", "along" + "move", "parallel" + "distance" + "move", "line" + "move", or "squash" + "to".`);
       if (f.reverse !== undefined && f.reverse !== 'inside') say(`${label}"reverse" can only be "inside" for now.`);
       if (f.id) {
         if (ids.has(f.id)) say(`${label}the id "${f.id}" is already used by an earlier fold.`);
         ids.add(f.id);
+        if (squash) {
+          if (ids.has(`${f.id}-2`)) say(`${label}a squash fold also makes "${f.id}-2", which is already used by an earlier fold.`);
+          ids.add(`${f.id}-2`);
+        }
       }
     });
     if (s.pose) {
