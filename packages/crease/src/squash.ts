@@ -13,7 +13,7 @@ const mirror = (v: Vector3, d: Vector3) => {
   const k = 2 * (v.x * d.x + v.z * d.z);
   return new Vector3(k * d.x - v.x, 0, k * d.z - v.z);
 };
-/** Up to 90° and back down again, peaking halfway. */
+/** Up and back down again, peaking halfway. */
 const standAndReturn: Profile = t => (t < 0.5 ? t / 0.5 : Math.max(0, (1 - t) / 0.5));
 
 /**
@@ -27,7 +27,7 @@ const standAndReturn: Profile = t => (t < 0.5 ? t / 0.5 : Math.max(0, (1 - t) / 
  * across the line halfway between the spine and the landing line mirrored in the hinge. Both outer
  * parts carry the spine onto the landing line, so the two layers stay joined along it.
  *
- * In motion: the flap stands up (both layers turn 90° about the hinge), then the lower layer lies
+ * In motion: the flap stands up (the upper layer turns to 90° about the hinge, the lower one to 80°), then the lower layer lies
  * back down while the upper layer carries on over, and both outer parts fold into the opening pocket.
  * The outer parts end up on top of their inner parts, inside surfaces together, as real paper does.
  */
@@ -187,7 +187,8 @@ export function compileSquash(spec: StepSpec, index: number, start: Face[], ctx:
   const bFold = makeOp(along(cB, far), { kind: 'squash', id, angle: 180, prof: range(0.5, 1), h: hB.lo, lift: DOWN }).op;
   const tr1 = binBase - hB.hi;
   bFold.tr = new Vector3(0, 2 * hB.hi - hB.lo + tr1 - boutBase, 0);
-  const aStand = makeOp(hingeLine(mid(allA)), { kind: 'squash', id, angle: 90, prof: standAndReturn, h: hA.lo, lift: UP }).op;
+  // The lower layer stops short of upright, so the two layers never share a plane (they'd flicker).
+  const aStand = makeOp(hingeLine(mid(allA)), { kind: 'squash', id, angle: 80, prof: standAndReturn, h: hA.lo, lift: UP }).op;
   const bTurn = makeOp(hingeLine(mid(allB)), { kind: 'squash', id, angle: 180, prof: linear, h: hB.hi, lift: UP }).op;
   bTurn.tr = new Vector3(0, tr1, 0);
 
