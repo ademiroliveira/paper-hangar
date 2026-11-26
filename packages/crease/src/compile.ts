@@ -1,5 +1,6 @@
 import { Matrix4, Vector3 } from 'three';
 import { EPS, Face, components, flatContains, flatToLocal, overlapsFromAbove, sharedSegments, splitFace } from './geometry';
+import { compileSquash } from './squash';
 import { RefError, flatPoint, resolve, type RefContext, type Resolved } from './refs';
 import type { FoldSpec, PaperSpec, PlaneSpec, PoseSpec, StepSpec, Vec2 } from './types';
 import { validatePlane } from './validate';
@@ -19,12 +20,12 @@ export const range = (a: number, b: number): Profile => t => smooth(Math.min(1, 
 
 /**
  * One rigid motion inside a step: rotate some faces about an axis, optionally translate.
- * `reverse` ops turn one layer of a pocket inside out;
+ * `reverse` ops turn one layer of a pocket inside out; `squash` ops open a flap and press it flat;
  * `lift` raises the whole model while a step moves; `cut` moves nothing and marks where to cut;
  * `settle` lets layers drop onto the paper right under them at the end of a step.
  */
 export interface Op {
-  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'lift' | 'cut' | 'settle';
+  kind: 'fold' | 'flip' | 'pose' | 'reverse' | 'squash' | 'lift' | 'cut' | 'settle';
   id?: string;
   /** Ops that move one piece of paper together (the layers of a reverse fold). Seams between them may open mid-motion. */
   group?: string;
@@ -119,13 +120,13 @@ export function faceMatrix(step: Step, i: number, mats: Matrix4[]): Matrix4 {
 
 /* ---------- building ops ---------- */
 
-const xz = (v: Vector3) => new Vector3(v.x, 0, v.z);
+export const xz = (v: Vector3) => new Vector3(v.x, 0, v.z);
 const distXZ = (a: Vector3, b: Vector3) => Math.hypot(a.x - b.x, a.z - b.z);
-const pointOf = (r: Resolved): Vector3 => (r.kind === 'point' ? r.p : r.a.clone().add(r.b).multiplyScalar(0.5));
+export const pointOf = (r: Resolved): Vector3 => (r.kind === 'point' ? r.p : r.a.clone().add(r.b).multiplyScalar(0.5));
 
-interface Line { a: Vector3; b: Vector3; mover: Vector3 }
+export interface Line { a: Vector3; b: Vector3; mover: Vector3 }
 
-function makeOp(line: Line, o: { kind: Op['kind']; id?: string; angle: number; prof?: Profile; h?: number; lift?: Vector3 }) {
+export function makeOp(line: Line, o: { kind: Op['kind']; id?: string; angle: number; prof?: Profile; h?: number; lift?: Vector3 }) {
   const h = o.h ?? 0, lift = o.lift ?? UP;
   const pa = new Vector3(line.a.x, h, line.a.z), pb = new Vector3(line.b.x, h, line.b.z);
   const r = new Vector3(line.mover.x, h, line.mover.z);
@@ -259,7 +260,7 @@ function land(ops: Op[], faces: Face[]) {
   }
 }
 
-function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[], ops: Op[]): Step {
+export function finish(index: number, spec: StepSpec, view: Step['view'], faces: Face[], ops: Op[]): Step {
   const step: Step = {
     index, title: spec.title, text: spec.text ?? '', view, faces, ops,
     // Lifting the model out of the way, or layers settling, isn't part of the fold; don't highlight it.
@@ -321,7 +322,7 @@ function growTrapped(chosen: Set<Face>, comps: Face[][]) {
   }
 }
 
-const layerKey = (y: number) => Math.round(y / (GAP / 8));
+export const layerKey = (y: number) => Math.round(y / (GAP / 8));
 
 /**
  * Inside reverse fold: the chosen paper is a pocket. Its upper half turns down and its lower half
@@ -373,6 +374,10 @@ function reverseOps(line: Line, id: string, chosen: Face[], faces: Face[]): { op
 
 function compileFolds(spec: StepSpec, index: number, start: Face[], ctx: RefContext): Step {
   const folds = spec.folds ?? [spec.fold!];
+  if (folds.some(f => f.squash)) {
+    if (folds.length > 1) throw new RefError('A squash fold has to be a step of its own.');
+    return compileSquash(spec, index, start, ctx, folds[0]);
+  }
   const lines = folds.map(f => solveFold(f, start, ctx));
   let faces = start.map(f => new Face(f.poly, f.M, f.tags));
   const ops: Op[] = [];
@@ -744,7 +749,8 @@ export function compilePlaneSoFar(spec: PlaneSpec): { plane: CompiledPlane; erro
       if (issues.length) throw new PlaneError(i, issues[0].message, issues);
       if (st.view === 'table') settle(st);
       steps.push(st);
-      const named = new Set([...(s.folds ?? (s.fold ? [s.fold] : [])).map(f => f.id), s.cut?.tab].filter(Boolean));
+      const fs = s.folds ?? (s.fold ? [s.fold] : []);
+      const named = new Set([...fs.map(f => f.id), ...fs.map(f => (f.squash && f.id ? `${f.id}-2` : undefined)), s.cut?.tab].filter(Boolean));
       for (const [id, segs] of ctx.creases) if (!known.has(id)) plane.creases.push({ id, step: i, named: named.has(id), segs });
       faces = st.end;
     } catch (e) {

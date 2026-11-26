@@ -122,6 +122,7 @@ References follow the paper as it folds: `corner:top-left` means that corner whe
 | `along` a line, `move` a point | a fold along an existing line; the side with the point moves |
 | `parallel` to a line, `distance` in cm, `move` a point | a fold parallel to that line ("fold the wing down 2.5 cm from the belly") |
 | `line` through two points, `move` a point | a fold on the straight line through both points ("fold from the nose tip to 2.5 cm from the keel at the back") |
+| `squash` a hinge line, `to` a line or point | a squash fold: the two-layer flap hinged on that line stands up, opens, and is pressed flat so its folded edge lands on `to` |
 
 Options on a fold:
 
@@ -129,6 +130,7 @@ Options on a fold:
 - `"layers": "top"` folds only the uppermost flap (for example, one wing). The default, `"all"`, folds every layer on the moving side.
 - `"flap": "<point>"` folds only the flap that holds that point of the paper, plus anything lying on it. Use it when two flaps are equally high and `"layers": "top"` can't tell which one you mean ("fold the left flap's edge out").
 - `"unfold": true` folds, presses a crease, and opens it flat again.
+- `"squash": "<line>"` with `"to"` makes a squash fold. The flap hinged on that line must be two layers joined along a fold (its spine), with nothing on top of it, and the spine must run into the hinge. The spine lands on `to`: a line through the point where the spine meets the hinge, or any point that sets the direction ("so the centre crease lands just off the edge"). The lower layer stays on its side of the hinge and the upper layer turns over to the other side; each gets a new crease, `crease:<id>` in the lower layer and `crease:<id>-2` in the upper one. Add `"flap"` when more than one flap is hinged on the same line.
 - `"reverse": "inside"` makes an inside reverse fold. The paper on the moving side must be a pocket, with the same number of layers on each side, joined along a fold. Its point turns inside out and ends up between the pocket's two sides. The model lifts off the table while the point turns in. The Valkyrie uses one to square off its corners.
 
 Other steps:
@@ -156,7 +158,7 @@ Pushing to `main` runs the tests and deploys to GitHub Pages (`.github/workflows
 
 ## Roadmap
 
-- Mountain folds without a flip, outside-reverse folds, squash and swivel folds, and tucking a flap into a pocket
+- Mountain folds without a flip, outside-reverse folds, swivel folds, squashing flaps of more than two layers, and tucking a flap into a pocket
 - An authoring mode: tap points on the paper to define the next fold, preview, export the recipe
 - Recipes drafted by an agent from a plane's name, written steps or photos, checked by crease before review ([plan](docs/agent-recipes.md))
 - Export each step as a FOLD frame, so models open in other origami tools
